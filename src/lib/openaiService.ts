@@ -101,17 +101,22 @@ class TableDetectionService {
 }
 
 export class OpenAIService {
-  private apiKey: string;
+  private apiKey: string | undefined;
   private baseURL = 'https://api.openai.com/v1';
 
   constructor() {
     this.apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  }
+
+  private checkApiKey(): void {
     if (!this.apiKey) {
       throw new Error('OpenAI API key not found. Please add VITE_OPENAI_API_KEY to your .env file');
     }
   }
 
   async generateSQLQuery(query: string, context: QueryContext): Promise<QueryResponse> {
+    this.checkApiKey();
+
     // Preprocess query to handle local terminology mapping
     const preprocessedQuery = this.preprocessQuery(query);
 
@@ -191,6 +196,8 @@ export class OpenAIService {
   }
 
   async transcribeAudio(audioBlob: Blob): Promise<string> {
+    this.checkApiKey();
+
     try {
       console.log('Transcribing audio blob:', {
         size: audioBlob.size,
@@ -245,6 +252,8 @@ export class OpenAIService {
   }
 
   async generateSummary(query: string, results: any[]): Promise<string> {
+    this.checkApiKey();
+
     if (results.length === 0) {
       return "No data found matching your query criteria.";
     }

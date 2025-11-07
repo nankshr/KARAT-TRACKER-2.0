@@ -44,6 +44,7 @@ services:
         VITE_API_URL: ${VITE_API_URL}
         VITE_APP_NAME: ${VITE_APP_NAME:-Karat Tracker}
         VITE_APP_VERSION: ${VITE_APP_VERSION:-2.0.0}
+        VITE_OPENAI_API_KEY: ${VITE_OPENAI_API_KEY:-}
     ports:
       # Port 3002 matches local-test setup and avoids conflicts with Coolify's Traefik (8080)
       # Traefik will proxy your domain to this port
