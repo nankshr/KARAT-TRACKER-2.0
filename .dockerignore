@@ -56,5 +56,6 @@ __tests__
 # Misc
 .prettierrc
 .eslintrc*
-tsconfig*.json
-vite.config.ts
+# NOTE: DO NOT exclude tsconfig*.json and vite.config.ts - they are needed for the build!
+# tsconfig*.json - Required for TypeScript compilation and path aliases
+# vite.config.ts - Required for Vite build configuration and path resolution
