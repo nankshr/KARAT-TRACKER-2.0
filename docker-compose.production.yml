@@ -1,29 +1,21 @@
-# Production Docker Compose with Caddy (Secure + HTTPS)
-# This configuration:
-# - Makes PostgREST internal-only (not exposed externally)
-# - Uses Caddy for automatic HTTPS with Let's Encrypt
-# - Fixes mixed content errors
-# - Provides clean URLs with SSL
+# Production Docker Compose for Coolify with Traefik
+# Uses Coolify's built-in Traefik proxy for HTTPS
+# PostgREST is internal-only (not exposed externally)
 
 version: '3.8'
 
 services:
-  # PostgREST API - Internal only, not exposed to internet
+  # PostgREST API - Internal only
   postgrest:
     image: postgrest/postgrest:v12.0.3
     container_name: karat-tracker20-postgrest
     expose:
-      - "3000"  # Only exposed within Docker network, NOT to internet
+      - "3000"  # Only exposed within Docker network
     environment:
-      # Database connection
       PGRST_DB_URI: ${PGRST_DB_URI}
       PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS:-public}
       PGRST_DB_ANON_ROLE: ${PGRST_DB_ANON_ROLE:-web_anon}
-
-      # JWT Secret
       PGRST_JWT_SECRET: ${PGRST_JWT_SECRET}
-
-      # Server configuration
       PGRST_SERVER_HOST: ${PGRST_SERVER_HOST:-*}
       PGRST_SERVER_PORT: ${PGRST_SERVER_PORT:-3000}
     restart: unless-stopped
@@ -34,17 +26,24 @@ services:
       retries: 5
       start_period: 60s
     networks:
-      - karat-network
+      - coolify  # Use Coolify's network for internal communication
+    labels:
+      # Traefik configuration for PostgREST API
+      - "traefik.enable=true"
+      - "traefik.http.routers.postgrest.rule=Host(`api.kt.eyediaworks.in`)"
+      - "traefik.http.routers.postgrest.entrypoints=websecure"
+      - "traefik.http.routers.postgrest.tls.certresolver=letsencrypt"
+      - "traefik.http.services.postgrest.loadbalancer.server.port=3000"
 
-  # Frontend Application - Internal only
+  # Frontend Application
   frontend:
     container_name: karat-tracker20-frontend
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        # API now uses HTTPS through Caddy
-        VITE_API_URL: https://kt.eyediaworks.in
+        # API uses HTTPS through Traefik
+        VITE_API_URL: https://api.kt.eyediaworks.in
         VITE_APP_NAME: ${VITE_APP_NAME:-Karat Tracker}
         VITE_APP_VERSION: ${VITE_APP_VERSION:-2.0.0}
         VITE_OPENAI_API_KEY: ${VITE_OPENAI_API_KEY:-}
@@ -60,32 +59,15 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - karat-network
-
-  # Caddy - Reverse proxy with automatic HTTPS
-  caddy:
-    image: caddy:2-alpine
-    container_name: karat-tracker20-caddy
-    ports:
-      - "80:80"    # HTTP (redirects to HTTPS)
-      - "443:443"  # HTTPS
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    restart: unless-stopped
-    depends_on:
-      - frontend
-      - postgrest
-    networks:
-      - karat-network
+      - coolify  # Use Coolify's network
+    labels:
+      # Traefik configuration for Frontend
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`kt.eyediaworks.in`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
 
 networks:
-  karat-network:
-    driver: bridge
-
-volumes:
-  caddy_data:
-    # Stores Let's Encrypt certificates
-  caddy_config:
-    # Stores Caddy configuration cache
+  coolify:
+    external: true  # Use Coolify's existing network
