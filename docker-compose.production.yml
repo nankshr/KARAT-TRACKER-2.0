@@ -1,30 +1,31 @@
-# Production Docker Compose for Coolify Deployment
-# Deploy this file in Coolify using Docker Compose deployment type
+# Production Docker Compose with Caddy (Secure + HTTPS)
+# This configuration:
+# - Makes PostgREST internal-only (not exposed externally)
+# - Uses Caddy for automatic HTTPS with Let's Encrypt
+# - Fixes mixed content errors
+# - Provides clean URLs with SSL
 
 version: '3.8'
 
 services:
-  # PostgREST API (connects to external PostgreSQL database)
+  # PostgREST API - Internal only, not exposed to internet
   postgrest:
     image: postgrest/postgrest:v12.0.3
     container_name: karat-tracker20-postgrest
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"  # Only exposed within Docker network, NOT to internet
     environment:
-      # Database connection (set in Coolify)
+      # Database connection
       PGRST_DB_URI: ${PGRST_DB_URI}
       PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS:-public}
       PGRST_DB_ANON_ROLE: ${PGRST_DB_ANON_ROLE:-web_anon}
 
-      # JWT Secret (set in Coolify)
+      # JWT Secret
       PGRST_JWT_SECRET: ${PGRST_JWT_SECRET}
 
       # Server configuration
       PGRST_SERVER_HOST: ${PGRST_SERVER_HOST:-*}
       PGRST_SERVER_PORT: ${PGRST_SERVER_PORT:-3000}
-
-      # API URL (set in Coolify with your actual domain)
-      PGRST_OPENAPI_SERVER_PROXY_URI: ${PGRST_OPENAPI_SERVER_PROXY_URI}
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 -O- http://127.0.0.1:3000/ 2>&1 | grep -q . || exit 1"]
@@ -35,22 +36,20 @@ services:
     networks:
       - karat-network
 
-  # Frontend Application
+  # Frontend Application - Internal only
   frontend:
     container_name: karat-tracker20-frontend
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        # Build args (set in Coolify)
-        VITE_API_URL: ${VITE_API_URL}
+        # API now uses HTTPS through Caddy
+        VITE_API_URL: https://kt.eyediaworks.in
         VITE_APP_NAME: ${VITE_APP_NAME:-Karat Tracker}
         VITE_APP_VERSION: ${VITE_APP_VERSION:-2.0.0}
         VITE_OPENAI_API_KEY: ${VITE_OPENAI_API_KEY:-}
-    ports:
-      # Port 3002 matches local-test setup and avoids conflicts with Coolify's Traefik (8080)
-      # Traefik will proxy your domain to this port
-      - "3002:80"
+    expose:
+      - "80"  # Only exposed within Docker network
     depends_on:
       - postgrest
     restart: unless-stopped
@@ -63,6 +62,30 @@ services:
     networks:
       - karat-network
 
+  # Caddy - Reverse proxy with automatic HTTPS
+  caddy:
+    image: caddy:2-alpine
+    container_name: karat-tracker20-caddy
+    ports:
+      - "80:80"    # HTTP (redirects to HTTPS)
+      - "443:443"  # HTTPS
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - postgrest
+    networks:
+      - karat-network
+
 networks:
   karat-network:
     driver: bridge
+
+volumes:
+  caddy_data:
+    # Stores Let's Encrypt certificates
+  caddy_config:
+    # Stores Caddy configuration cache
