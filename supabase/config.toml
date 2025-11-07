@@ -1,0 +1,50 @@
+# Supabase Configuration
+# This file uses environment variables from .env for dynamic configuration
+
+# Project ID from environment variable
+project_id = "${SUPABASE_PROJECT_ID}"
+
+# Optional: Add other common Supabase configurations that can be environment-driven
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+smtp_port = 54325
+pop3_port = 54326
+
+[storage]
+enabled = true
+port = 54327
+image_transformation = true
+duplicate_functions = false
+
+[auth]
+enabled = true
+port = 54328
+site_url = "${SITE_URL}"
+additional_redirect_urls = ["${ADDITIONAL_REDIRECT_URLS}"]
+jwt_expiry = 3600
+enable_signup = true
+enable_email_confirmations = false
+
+[edge_runtime]
+enabled = true
+port = 54329
+
+[analytics]
+enabled = false

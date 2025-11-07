@@ -1,0 +1,15 @@
+{
+  "name": "karat-tracker-scripts",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Database setup and migration scripts",
+  "scripts": {
+    "setup": "node setup-database.js",
+    "migrate": "node migrate-data.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.56.1",
+    "pg": "^8.11.3",
+    "dotenv": "^16.3.1"
+  }
+}

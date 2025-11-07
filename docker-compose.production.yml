@@ -1,0 +1,65 @@
+# Production Docker Compose for Coolify Deployment
+# This file is for reference - Coolify will read environment variables from its UI
+
+version: '3.8'
+
+services:
+  # PostgREST API (connects to external PostgreSQL database)
+  postgrest:
+    image: postgrest/postgrest:v12.0.3
+    container_name: karat-tracker-postgrest
+    ports:
+      - "3000:3000"
+    environment:
+      # Database connection (set in Coolify)
+      PGRST_DB_URI: ${PGRST_DB_URI}
+      PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS:-public}
+      PGRST_DB_ANON_ROLE: ${PGRST_DB_ANON_ROLE:-web_anon}
+
+      # JWT Secret (set in Coolify)
+      PGRST_JWT_SECRET: ${PGRST_JWT_SECRET}
+
+      # Server configuration
+      PGRST_SERVER_HOST: ${PGRST_SERVER_HOST:-*}
+      PGRST_SERVER_PORT: ${PGRST_SERVER_PORT:-3000}
+
+      # API URL (set in Coolify with your actual domain)
+      PGRST_OPENAPI_SERVER_PROXY_URI: ${PGRST_OPENAPI_SERVER_PROXY_URI}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - karat-network
+
+  # Frontend Application
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Build args (set in Coolify)
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_APP_NAME: ${VITE_APP_NAME:-Karat Tracker}
+        VITE_APP_VERSION: ${VITE_APP_VERSION:-2.0.0}
+    container_name: karat-tracker-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      postgrest:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - karat-network
+
+networks:
+  karat-network:
+    driver: bridge

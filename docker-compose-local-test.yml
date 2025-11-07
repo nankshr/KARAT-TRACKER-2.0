@@ -1,0 +1,38 @@
+# Docker Compose for Local Testing
+# Runs PostgREST and Frontend locally, connecting to Coolify PostgreSQL
+
+version: '3.8'
+
+services:
+  # PostgREST API (local, connects to Coolify PostgreSQL)
+  postgrest:
+    image: postgrest/postgrest:v12.0.3
+    ports:
+      - "3000:3000"
+    environment:
+      # Connect to Coolify PostgreSQL (URL-encoded password)
+      PGRST_DB_URI: "postgres://authenticator:2ewYVu8cBJWFi%2F24H8ZTEB0BNNPfDf6eAda4htzgXy0%3D@69.62.84.73:5432/karat_tracker_t"
+      PGRST_DB_SCHEMAS: "public"
+      PGRST_DB_ANON_ROLE: "web_anon"
+      PGRST_JWT_SECRET: "7XMblEc5aEcKvaIWJ4mcDhBJRlQXAW9NU0KxLdxxx4w="
+      PGRST_SERVER_HOST: "*"
+      PGRST_SERVER_PORT: "3000"
+      PGRST_OPENAPI_SERVER_PROXY_URI: "http://localhost:3000"
+    restart: unless-stopped
+    networks:
+      - karat-network
+
+  # Frontend (connects to local PostgREST)
+  frontend:
+    image: karat-tracker-frontend:latest
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgrest
+    restart: unless-stopped
+    networks:
+      - karat-network
+
+networks:
+  karat-network:
+    driver: bridge

@@ -1,0 +1,15 @@
+ARCHIVED MIGRATION FILES
+========================
+
+This folder contains the original migration files that have been consolidated
+into the main complete-database-setup.sql file.
+
+Files archived:
+- 20250902061940_2164445b-4f80-4c98-862a-da65f704d667.sql (Original schema)
+- schema-function.sql (Table schema inspection function)
+- execute-query-function.sql (Safe AI query execution function)
+
+IMPORTANT: Use ../complete-database-setup.sql instead of these files.
+The consolidated script includes all functionality plus critical fixes.
+
+These files are kept for reference only.
