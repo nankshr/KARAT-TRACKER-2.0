@@ -7,6 +7,7 @@ services:
   # PostgREST API (connects to external PostgreSQL database)
   postgrest:
     image: postgrest/postgrest:v12.0.3
+    container_name: karat-tracker20-postgrest
     ports:
       - "3000:3000"
     environment:
@@ -36,6 +37,7 @@ services:
 
   # Frontend Application
   frontend:
+    container_name: karat-tracker20-frontend
     build:
       context: .
       dockerfile: Dockerfile
