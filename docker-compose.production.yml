@@ -1,5 +1,5 @@
 # Production Docker Compose for Coolify Deployment
-# This file is for reference - Coolify will read environment variables from its UI
+# Deploy this file in Coolify using Docker Compose deployment type
 
 version: '3.8'
 
@@ -7,7 +7,6 @@ services:
   # PostgREST API (connects to external PostgreSQL database)
   postgrest:
     image: postgrest/postgrest:v12.0.3
-    container_name: karat-tracker-postgrest
     ports:
       - "3000:3000"
     environment:
@@ -45,9 +44,10 @@ services:
         VITE_API_URL: ${VITE_API_URL}
         VITE_APP_NAME: ${VITE_APP_NAME:-Karat Tracker}
         VITE_APP_VERSION: ${VITE_APP_VERSION:-2.0.0}
-    container_name: karat-tracker-frontend
     ports:
-      - "80:80"
+      # Port 3002 matches local-test setup and avoids conflicts with Coolify's Traefik (8080)
+      # Traefik will proxy your domain to this port
+      - "3002:80"
     depends_on:
       postgrest:
         condition: service_healthy
