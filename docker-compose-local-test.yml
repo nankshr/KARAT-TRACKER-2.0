@@ -24,9 +24,16 @@ services:
 
   # Frontend (connects to local PostgREST)
   frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: "http://localhost:3000"
+        VITE_APP_NAME: "Karat Tracker"
+        VITE_APP_VERSION: "2.0.0"
     image: karat-tracker-frontend:latest
     ports:
-      - "8080:80"
+      - "3002:80"
     depends_on:
       - postgrest
     restart: unless-stopped
