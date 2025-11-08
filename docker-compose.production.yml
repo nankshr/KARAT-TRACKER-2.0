@@ -28,7 +28,7 @@ services:
       # Traefik configuration for PostgREST API
       - "traefik.enable=true"
       - "traefik.http.routers.postgrest.rule=Host(`api.kt.eyediaworks.in`)"
-      - "traefik.http.routers.postgrest.entrypoints=websecure"
+      - "traefik.http.routers.postgrest.entrypoints=https"
       - "traefik.http.routers.postgrest.tls.certresolver=letsencrypt"
       - "traefik.http.services.postgrest.loadbalancer.server.port=3000"
 
@@ -61,7 +61,7 @@ services:
       # Traefik configuration for Frontend
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=Host(`kt.eyediaworks.in`)"
-      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.entrypoints=https"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
 
