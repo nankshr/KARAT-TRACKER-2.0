@@ -43,8 +43,10 @@ backup/
 postgres_data/
 pgdata/
 
-# Migration exports (contain sensitive data)
+# Migration exports and config (contain sensitive data)
 migration/exports/
+migration/config.env
+migration/.last_export
 
 #.claude
 .claude/
