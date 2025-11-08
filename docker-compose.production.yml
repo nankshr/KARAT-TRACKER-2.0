@@ -20,7 +20,7 @@ services:
       PGRST_SERVER_PORT: ${PGRST_SERVER_PORT:-3000}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -O- http://127.0.0.1:3000/ 2>&1 | grep -q . || exit 1"]
+      test: ["CMD-SHELL", "timeout 5 cat < /dev/null > /dev/tcp/127.0.0.1/3000 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
