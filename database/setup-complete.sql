@@ -287,6 +287,68 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Admin update user function (admin can update other users' info and passwords)
+CREATE OR REPLACE FUNCTION admin_update_user(
+    user_id_input UUID,
+    new_password TEXT DEFAULT NULL,
+    new_role TEXT DEFAULT NULL
+)
+RETURNS TABLE(
+    id UUID,
+    username TEXT,
+    role TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE
+) AS $$
+DECLARE
+    v_admin_role TEXT;
+    v_current_username TEXT;
+    v_new_password_hash TEXT;
+BEGIN
+    -- Check if current user is admin
+    v_admin_role := current_user_role();
+    IF v_admin_role != 'admin' THEN
+        RAISE EXCEPTION 'Access denied: Only admin users can update user information';
+    END IF;
+
+    -- Get current username (for logging/validation)
+    SELECT u.username INTO v_current_username
+    FROM public.users u
+    WHERE u.id = user_id_input;
+
+    IF v_current_username IS NULL THEN
+        RAISE EXCEPTION 'User not found';
+    END IF;
+
+    -- Validate role if provided
+    IF new_role IS NOT NULL THEN
+        IF new_role NOT IN ('admin', 'owner', 'employee') THEN
+            RAISE EXCEPTION 'Invalid role. Must be one of: admin, owner, employee';
+        END IF;
+    END IF;
+
+    -- Hash password if provided
+    IF new_password IS NOT NULL AND new_password != '' THEN
+        v_new_password_hash := crypt(new_password, gen_salt('bf'));
+    END IF;
+
+    -- Update user record
+    UPDATE public.users u
+    SET
+        password = COALESCE(v_new_password_hash, u.password),
+        role = COALESCE(new_role, u.role),
+        updated_at = now()
+    WHERE u.id = user_id_input;
+
+    -- Return updated user info
+    RETURN QUERY
+    SELECT u.id, u.username, u.role, u.updated_at
+    FROM public.users u
+    WHERE u.id = user_id_input;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION admin_update_user(UUID, TEXT, TEXT) TO web_anon;
+
 -- Logout function
 CREATE OR REPLACE FUNCTION logout()
 RETURNS BOOLEAN AS $$

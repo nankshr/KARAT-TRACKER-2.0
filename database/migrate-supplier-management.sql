@@ -7,6 +7,12 @@
 -- ============================================================================
 
 -- ============================================================================
+-- STEP 0: ENSURE PGCRYPTO EXTENSION EXISTS (Required for password hashing)
+-- ============================================================================
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- ============================================================================
 -- STEP 1: CREATE SUPPLIER_TRANSACTIONS TABLE
 -- ============================================================================
 
@@ -156,6 +162,71 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================================================
+-- STEP 6: ADD ADMIN_UPDATE_USER FUNCTION (for admin user management)
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION admin_update_user(
+    user_id_input UUID,
+    new_password TEXT DEFAULT NULL,
+    new_role TEXT DEFAULT NULL
+)
+RETURNS TABLE(
+    id UUID,
+    username TEXT,
+    role TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE
+) AS $$
+DECLARE
+    v_admin_role TEXT;
+    v_current_username TEXT;
+    v_new_password_hash TEXT;
+BEGIN
+    -- Check if current user is admin
+    v_admin_role := current_user_role();
+    IF v_admin_role != 'admin' THEN
+        RAISE EXCEPTION 'Access denied: Only admin users can update user information';
+    END IF;
+
+    -- Get current username (for logging/validation)
+    SELECT u.username INTO v_current_username
+    FROM public.users u
+    WHERE u.id = user_id_input;
+
+    IF v_current_username IS NULL THEN
+        RAISE EXCEPTION 'User not found';
+    END IF;
+
+    -- Validate role if provided
+    IF new_role IS NOT NULL THEN
+        IF new_role NOT IN ('admin', 'owner', 'employee') THEN
+            RAISE EXCEPTION 'Invalid role. Must be one of: admin, owner, employee';
+        END IF;
+    END IF;
+
+    -- Hash password if provided
+    IF new_password IS NOT NULL AND new_password != '' THEN
+        v_new_password_hash := crypt(new_password, gen_salt('bf'));
+    END IF;
+
+    -- Update user record
+    UPDATE public.users u
+    SET
+        password = COALESCE(v_new_password_hash, u.password),
+        role = COALESCE(new_role, u.role),
+        updated_at = now()
+    WHERE u.id = user_id_input;
+
+    -- Return updated user info
+    RETURN QUERY
+    SELECT u.id, u.username, u.role, u.updated_at
+    FROM public.users u
+    WHERE u.id = user_id_input;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION admin_update_user(UUID, TEXT, TEXT) TO web_anon;
+
+-- ============================================================================
 -- MIGRATION COMPLETE
 -- ============================================================================
 
@@ -170,10 +241,12 @@ BEGIN
     RAISE NOTICE '  ✓ Fixed JWT to use user_role';
     RAISE NOTICE '  ✓ Updated sign_jwt with HMAC-SHA256';
     RAISE NOTICE '  ✓ Updated current_user_role function';
+    RAISE NOTICE '  ✓ Added admin_update_user function';
     RAISE NOTICE '';
     RAISE NOTICE 'Next steps:';
     RAISE NOTICE '  1. Restart PostgREST to reload schema';
     RAISE NOTICE '  2. Test login functionality';
     RAISE NOTICE '  3. Verify supplier management works';
+    RAISE NOTICE '  4. Test user management (admin only)';
     RAISE NOTICE '========================================';
 END $$;

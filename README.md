@@ -11,6 +11,7 @@
 [![Vite](https://img.shields.io/badge/Vite-5.4-purple?style=flat-square&logo=vite)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-cyan?style=flat-square&logo=tailwind-css)](https://tailwindcss.com/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=flat-square&logo=docker)](https://www.docker.com/)
+[![Production](https://img.shields.io/badge/Status-Production%20Ready-success?style=flat-square)](https://kt.eyediaworks.in)
 
 *A comprehensive jewelry management application for tracking daily rates, sales transactions, expenses, and business analytics with AI-powered insights.*
 
@@ -427,3 +428,39 @@ Private - All rights reserved
 **Maintained by:** nankshr
 **Last Updated:** November 2024
 **Version:** 2.0.0
+
+
+**Here are the commands to build and deploy locally:**
+# Step 1: Clean up old containers and images (optional but recommended)
+docker-compose -f docker-compose-local-test.yml down
+docker rmi karat-tracker-frontend:latest
+
+# Step 2: Build the Docker image locally with latest code
+docker build -t karat-tracker-frontend:latest --build-arg VITE_API_URL=http://localhost:3000 --build-arg VITE_APP_NAME="Karat Tracker" --build-arg VITE_APP_VERSION="2.0.0" .
+
+# Step 3: Start all services (PostgREST + Frontend)
+docker-compose -f docker-compose-local-test.yml up -d
+
+# Step 4: Check if containers are running
+docker ps
+
+# Step 5: View logs (optional, to debug)
+docker-compose -f docker-compose-local-test.yml logs -f
+
+# Step 6: Access the application
+# Frontend: http://localhost:3002
+# PostgREST API: http://localhost:3000
+Or use this single command to do it all at once:
+# Clean, rebuild, and start everything
+docker-compose -f docker-compose-local-test.yml down && docker build -t karat-tracker-frontend:latest --build-arg VITE_API_URL=http://localhost:3000 --build-arg VITE_APP_NAME="Karat Tracker" --build-arg VITE_APP_VERSION="2.0.0" --no-cache . && docker-compose -f docker-compose-local-test.yml up -d && docker ps
+To stop the services:
+docker-compose -f docker-compose-local-test.yml down
+To view logs:
+# View all logs
+docker-compose -f docker-compose-local-test.yml logs -f
+
+# View frontend logs only
+docker logs -f karat-tracker-20-frontend-1
+
+# View PostgREST logs only
+docker logs -f karat-tracker-20-postgrest-1
