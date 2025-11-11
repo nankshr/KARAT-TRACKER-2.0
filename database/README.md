@@ -6,22 +6,34 @@ This guide provides complete instructions for setting up the PostgreSQL database
 
 ## Quick Start
 
-For a fresh database setup, simply run:
+### For Fresh Database (New Setup)
 
 ```bash
 psql -h YOUR_HOST -p 5432 -U postgres -d karat_tracker_p -f database/setup-complete.sql
+```
+
+### For Existing Database (Add Supplier Management)
+
+```bash
+psql -h YOUR_HOST -p 5432 -U postgres -d karat_tracker_p -f database/migrate-supplier-management.sql
 ```
 
 ## Files in this Directory
 
 ### Essential Files
 
-1. **`setup-complete.sql`** - Complete database setup script
-   - Creates all tables with proper schema
+1. **`setup-complete.sql`** ⭐ - Complete database setup script for NEW databases
+   - Creates all tables with proper schema (including supplier_transactions)
    - Creates `authenticator` and `web_anon` roles
    - Sets up all permissions and grants
-   - Creates authentication functions
-   - Safe to run on existing databases (uses IF NOT EXISTS)
+   - Creates authentication functions with proper JWT signing
+   - Safe to run on existing databases (uses CREATE OR REPLACE)
+
+2. **`migrate-supplier-management.sql`** ⭐ - Migration script for EXISTING databases
+   - Adds supplier_transactions table
+   - Fixes JWT to use `user_role` (prevents PostgREST role switching issues)
+   - Updates sign_jwt function with proper HMAC-SHA256 signing
+   - Run this if you already have a production database running
 
 ### Archived/Legacy Files (can be deleted)
 
@@ -70,26 +82,36 @@ The database uses a two-role system for security:
    - Direct and indirect expenses
    - Credit tracking (is_credit field)
 
-5. **`activity_log`** - Audit trail
+5. **`supplier_transactions`** - Supplier material transactions (NEW)
+   - Track material purchases from suppliers
+   - Calculation types: Cash→Kacha, Kacha→Purity, Ornament→Purity
+   - Material types: gold, silver
+   - Transaction types: input (buying), output (selling)
+   - Credit tracking support
+
+6. **`activity_log`** - Audit trail
    - Tracks all INSERT, UPDATE, DELETE operations
    - Stores old and new data as JSONB
 
-6. **`jwt_config`** - JWT configuration
+7. **`jwt_config`** - JWT configuration
    - Stores JWT secret for token generation
 
 ### Database Functions
 
 All authentication and utility functions are included:
 
-- `login(username, password)` - User authentication
-- `create_user(username, password, role)` - Create new user
+- `login(username, password)` - User authentication with JWT token generation
+  - **Updated**: Now uses `user_role` in JWT (prevents PostgREST role switching)
+- `create_user(username, password, role)` - Create new user with hashed password
 - `change_password(current, new)` - Change password
 - `logout()` - Clear session
 - `current_user_id()` - Get current user ID from JWT
 - `current_user_role()` - Get current user role from JWT
+  - **Updated**: Now reads `user_role` claim (not `role`)
 - `execute_safe_query(query)` - Execute dynamic queries
 - `get_table_schema(table_name)` - Get table structure
-- `sign_jwt(payload, secret)` - Generate JWT tokens
+- `sign_jwt(payload, secret)` - Generate properly signed JWT tokens
+  - **Updated**: Uses HMAC-SHA256 signing with base64url encoding
 
 ## Manual Setup Instructions
 
@@ -303,14 +325,78 @@ For issues or questions:
 3. Check database logs: `psql` error messages
 4. Verify configuration in `.env` files
 
+## Recent Changes (v2.1 - Supplier Management)
+
+### What's New
+
+**New Feature: Supplier Management**
+- Added `supplier_transactions` table for tracking material purchases from suppliers
+- Supports three calculation types:
+  - Cash → Kacha (cash amount ÷ rate = kacha weight)
+  - Kacha → Purity (kacha weight × purity% = pure gold)
+  - Ornament → Purity (ornament weight × purity% = pure gold)
+
+**Critical JWT Fixes**
+- Fixed JWT tokens to use `user_role` instead of `role`
+  - **Why**: PostgREST was trying to switch to PostgreSQL roles (admin, owner, employee) which don't exist
+  - **Solution**: Use `user_role` in JWT payload to avoid role switching
+- Updated `sign_jwt()` function with proper HMAC-SHA256 signing
+  - Generates properly signed tokens (not `.unsigned` anymore)
+  - Uses base64url encoding (removes newlines and padding)
+- Updated `current_user_role()` to read `user_role` from JWT
+
+### Migration Path
+
+**For Existing Production Databases:**
+```bash
+# Run the migration script
+psql -h YOUR_HOST -p 5432 -U postgres -d karat_tracker_p \
+  -f database/migrate-supplier-management.sql
+
+# Restart PostgREST to reload schema
+docker restart postgrest-container
+```
+
+**For New Databases:**
+```bash
+# Just run the complete setup
+psql -h YOUR_HOST -p 5432 -U postgres -d karat_tracker_p \
+  -f database/setup-complete.sql
+```
+
+### Breaking Changes
+
+⚠️ **Important**: After applying the migration:
+1. All existing JWT tokens will be invalidated (users need to re-login)
+2. The JWT payload structure has changed:
+   - Before: `{ "role": "admin" }`
+   - After: `{ "user_role": "admin" }`
+
+### Verification
+
+After running the migration, verify everything works:
+
+```sql
+-- Test login and JWT generation
+SELECT * FROM login('admin', 'admin');
+
+-- Verify supplier_transactions table exists
+SELECT table_name FROM information_schema.tables
+WHERE table_schema='public' AND table_name='supplier_transactions';
+
+-- Check if JWT is properly signed (should have 3 parts separated by dots)
+SELECT token FROM login('admin', 'admin');
+```
+
 ## Summary
 
 This consolidated setup provides:
-- ✅ Complete database schema
-- ✅ Proper role-based security
+- ✅ Complete database schema (7 tables including supplier_transactions)
+- ✅ Proper role-based security (authenticator + web_anon)
 - ✅ All necessary permissions
-- ✅ Authentication functions
-- ✅ Migration tools
+- ✅ Authentication functions with properly signed JWT tokens
+- ✅ Migration tools for Supabase → PostgreSQL
+- ✅ Migration script for adding supplier management
 - ✅ Clear documentation
 
 The database is now ready for production use with PostgREST!

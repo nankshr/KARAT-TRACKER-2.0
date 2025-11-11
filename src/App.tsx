@@ -9,6 +9,7 @@ import { Login } from "@/components/Login";
 import { Dashboard } from "@/components/Dashboard";
 import { AddExpense } from "@/components/AddExpense";
 import { AddSales } from "@/components/AddSales";
+import { AddSupplierTransaction } from "@/components/AddSupplierTransaction";
 import { TableDataExport } from "@/components/TableDataExport";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -56,6 +57,11 @@ const AppContent = () => {
         <Route path="/add-sales" element={
           <ProtectedRoute>
             <AddSales />
+          </ProtectedRoute>
+        } />
+        <Route path="/add-supplier-transaction" element={
+          <ProtectedRoute>
+            <AddSupplierTransaction />
           </ProtectedRoute>
         } />
         <Route path="/table-export" element={

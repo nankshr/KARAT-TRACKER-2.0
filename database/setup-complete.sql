@@ -105,6 +105,23 @@ CREATE TABLE IF NOT EXISTS public.sales_log (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
+-- Create supplier_transactions table
+CREATE TABLE IF NOT EXISTS public.supplier_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    inserted_by TEXT NOT NULL REFERENCES public.users(username),
+    date_time TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    asof_date DATE NOT NULL,
+    supplier_name TEXT NOT NULL,
+    material TEXT NOT NULL CHECK (material IN ('gold', 'silver')),
+    type TEXT NOT NULL CHECK (type IN ('input', 'output')),
+    calculation_type TEXT NOT NULL CHECK (calculation_type IN ('cashToKacha', 'kachaToPurity', 'ornamentToPurity')),
+    input_value_1 DECIMAL(10,3) NOT NULL,
+    input_value_2 DECIMAL(10,3) NOT NULL,
+    result DECIMAL(10,3) NOT NULL,
+    is_credit BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
 -- Create activity_log table
 CREATE TABLE IF NOT EXISTS public.activity_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -138,6 +155,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.users TO web_anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.daily_rates TO web_anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.expense_log TO web_anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.sales_log TO web_anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.supplier_transactions TO web_anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.activity_log TO web_anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.jwt_config TO web_anon;
 
@@ -197,12 +215,12 @@ BEGIN
     FROM public.jwt_config
     WHERE key = 'secret';
 
-    -- Generate token (simplified - in production use proper JWT generation)
+    -- Generate token with user_role (not role, to avoid PostgREST role switching)
     v_token := sign_jwt(
         json_build_object(
             'user_id', v_user.id,
             'username', v_user.username,
-            'role', v_user.role,
+            'user_role', v_user.role,
             'exp', extract(epoch from now() + interval '24 hours')
         )::json,
         v_token
@@ -300,7 +318,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION current_user_role()
 RETURNS TEXT AS $$
 BEGIN
-    RETURN current_setting('request.jwt.claims', true)::json->>'role';
+    -- Use user_role from JWT (not role, to avoid PostgREST role switching)
+    RETURN current_setting('request.jwt.claims', true)::json->>'user_role';
 EXCEPTION
     WHEN OTHERS THEN
         RETURN NULL;
@@ -337,19 +356,80 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Sign JWT function (using pgjwt extension)
-CREATE EXTENSION IF NOT EXISTS pgjwt;
+-- Sign JWT function (using pgjwt extension if available, otherwise simple base64)
+-- Try to create pgjwt extension, but don't fail if it's not available
+DO $$
+BEGIN
+    CREATE EXTENSION IF NOT EXISTS pgjwt;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'pgjwt extension not available, using fallback JWT signing';
+END $$;
 
 CREATE OR REPLACE FUNCTION sign_jwt(payload JSON, secret TEXT DEFAULT NULL, algorithm TEXT DEFAULT 'HS256')
 RETURNS TEXT AS $$
 DECLARE
     v_secret TEXT;
+    v_header JSON;
+    v_payload_b64 TEXT;
+    v_header_b64 TEXT;
+    v_signature_b64 TEXT;
+    v_string_to_sign TEXT;
 BEGIN
     -- Use provided secret or get from config
     v_secret := COALESCE(secret, (SELECT value FROM jwt_config WHERE key = 'secret'));
-    RETURN extensions.sign(payload, v_secret, algorithm);
+
+    -- Build JWT header
+    v_header := json_build_object('alg', algorithm, 'typ', 'JWT');
+
+    -- Convert to base64url format (remove newlines, padding, replace +/ with -_)
+    v_header_b64 := REPLACE(REPLACE(REPLACE(
+        RTRIM(encode(v_header::text::bytea, 'base64'), '='),
+        E'\n', ''), '+', '-'), '/', '_');
+    v_payload_b64 := REPLACE(REPLACE(REPLACE(
+        RTRIM(encode(payload::text::bytea, 'base64'), '='),
+        E'\n', ''), '+', '-'), '/', '_');
+
+    -- Create string to sign
+    v_string_to_sign := v_header_b64 || '.' || v_payload_b64;
+
+    -- Sign with HMAC-SHA256 and convert to base64url
+    v_signature_b64 := REPLACE(REPLACE(REPLACE(
+        RTRIM(encode(hmac(v_string_to_sign, v_secret, 'sha256'), 'base64'), '='),
+        E'\n', ''), '+', '-'), '/', '_');
+
+    -- Return complete JWT token
+    RETURN v_string_to_sign || '.' || v_signature_b64;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================================================
+-- STEP 4B: RECREATE ROW LEVEL SECURITY POLICIES
+-- ============================================================================
+-- Note: These policies may have been dropped when functions were dropped with CASCADE
+-- Recreate them to ensure proper access control
+
+-- Enable RLS on tables that need it
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist (for idempotency)
+DROP POLICY IF EXISTS "Users can update own record, admin/owner can update all" ON public.users;
+DROP POLICY IF EXISTS "Users can view own record, admin/owner can view all" ON public.users;
+
+-- Users table policies
+CREATE POLICY "Users can view own record, admin/owner can view all"
+ON public.users FOR SELECT
+USING (
+  id = current_user_id()
+  OR current_user_role() IN ('admin', 'owner')
+);
+
+CREATE POLICY "Users can update own record, admin/owner can update all"
+ON public.users FOR UPDATE
+USING (
+  id = current_user_id()
+  OR current_user_role() IN ('admin', 'owner')
+);
 
 -- ============================================================================
 -- STEP 5: CREATE INDEXES FOR PERFORMANCE
@@ -360,6 +440,9 @@ CREATE INDEX IF NOT EXISTS idx_users_sessionid ON public.users(sessionid);
 CREATE INDEX IF NOT EXISTS idx_daily_rates_asof_date ON public.daily_rates(asof_date);
 CREATE INDEX IF NOT EXISTS idx_expense_log_asof_date ON public.expense_log(asof_date);
 CREATE INDEX IF NOT EXISTS idx_sales_log_asof_date ON public.sales_log(asof_date);
+CREATE INDEX IF NOT EXISTS idx_supplier_transactions_asof_date ON public.supplier_transactions(asof_date);
+CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier ON public.supplier_transactions(supplier_name);
+CREATE INDEX IF NOT EXISTS idx_supplier_transactions_material ON public.supplier_transactions(material);
 CREATE INDEX IF NOT EXISTS idx_activity_log_timestamp ON public.activity_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_activity_log_user_id ON public.activity_log(user_id);
 
@@ -388,7 +471,8 @@ BEGIN
     RAISE NOTICE '';
     RAISE NOTICE 'Tables created:';
     RAISE NOTICE '  - users, daily_rates, expense_log';
-    RAISE NOTICE '  - sales_log, activity_log, jwt_config';
+    RAISE NOTICE '  - sales_log, supplier_transactions';
+    RAISE NOTICE '  - activity_log, jwt_config';
     RAISE NOTICE '';
     RAISE NOTICE 'Permissions granted to web_anon role';
     RAISE NOTICE 'Functions created for authentication';

@@ -23,13 +23,14 @@ interface TableData {
   [key: string]: any;
 }
 
-type TableName = 'users' | 'daily_rates' | 'expense_log' | 'sales_log' | 'activity_log';
+type TableName = 'users' | 'daily_rates' | 'expense_log' | 'sales_log' | 'supplier_transactions' | 'activity_log';
 
 const AVAILABLE_TABLES: { value: TableName; label: string }[] = [
  /* { value: 'users', label: 'Users' }, */
   { value: 'daily_rates', label: 'Daily Rates' },
   { value: 'expense_log', label: 'Expense Log' },
   { value: 'sales_log', label: 'Sales Log' },
+  { value: 'supplier_transactions', label: 'Supplier Transactions' },
   { value: 'activity_log', label: 'Activity Log' },
 ];
 
@@ -103,6 +104,22 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     ip_address: 'IP Address',
     user_agent: 'User Agent',
   },
+  supplier_transactions: {
+    actions: 'Actions',
+    id: 'ID',
+    asof_date: 'Date',
+    inserted_by: 'Inserted By',
+    date_time: 'Transaction Time',
+    supplier_name: 'Supplier Name',
+    material: 'Material',
+    type: 'Type',
+    calculation_type: 'Calculation',
+    input_value_1: 'Input 1',
+    input_value_2: 'Input 2',
+    result: 'Result (g)',
+    is_credit: 'Credit',
+    created_at: 'Created At',
+  },
 };
 
 // Default visible columns for each table
@@ -111,6 +128,7 @@ const DEFAULT_VISIBLE_COLUMNS: Record<string, string[]> = {
   daily_rates: ['asof_date', 'material', 'karat', 'new_price_per_gram', 'old_price_per_gram'],
   expense_log: ['actions', 'asof_date', 'expense_type', 'item_name', 'cost', 'is_credit'],
   sales_log: ['actions', 'asof_date', 'material', 'type', 'item_name', 'tag_no', 'customer_name', 'purchase_weight_grams'],
+  supplier_transactions: ['actions', 'asof_date', 'supplier_name', 'material', 'type', 'calculation_type', 'input_value_1', 'input_value_2', 'result'],
   activity_log: ['user_id', 'table_name', 'action', 'old_data', 'new_data', 'timestamp'],
 };
 
@@ -118,6 +136,7 @@ const DEFAULT_VISIBLE_COLUMNS: Record<string, string[]> = {
 const COLUMNS_TO_TOTAL: Record<string, string[]> = {
   sales_log: ['wastage','old_weight_grams','old_material_profit','purchase_weight_grams','purchase_cost','selling_cost', 'profit'],
   expense_log: ['cost'],
+  supplier_transactions: ['result'],
   daily_rates: [],
   users: [],
   activity_log: [],
@@ -133,6 +152,7 @@ const getSortColumn = (tableName: string): string => {
     case 'daily_rates':
     case 'expense_log':
     case 'sales_log':
+    case 'supplier_transactions':
       return 'asof_date';
     default:
       return 'asof_date';
@@ -220,6 +240,32 @@ export const TableDataExport = () => {
       return COLUMN_DISPLAY_NAMES[loadedTable][column] || column;
     }
     return column;
+  };
+
+  // Get smart column name for supplier_transactions based on calculation_type
+  const getSmartColumnName = (column: string, row: TableData): string => {
+    if (loadedTable === 'supplier_transactions' && row.calculation_type) {
+      if (column === 'input_value_1') {
+        switch (row.calculation_type) {
+          case 'cashToKacha': return 'Cash (₹)';
+          case 'kachaToPurity': return 'Kacha (g)';
+          case 'ornamentToPurity': return 'Ornament (g)';
+        }
+      } else if (column === 'input_value_2') {
+        switch (row.calculation_type) {
+          case 'cashToKacha': return 'Rate (₹/g)';
+          case 'kachaToPurity': return 'Purity (%)';
+          case 'ornamentToPurity': return 'Purity (%)';
+        }
+      } else if (column === 'result') {
+        switch (row.calculation_type) {
+          case 'cashToKacha': return 'Kacha (g)';
+          case 'kachaToPurity': return 'Pure (g)';
+          case 'ornamentToPurity': return 'Pure (g)';
+        }
+      }
+    }
+    return getColumnDisplayName(column);
   };
 
   const handleFilterChange = (column: string, value: string) => {
@@ -406,6 +452,51 @@ export const TableDataExport = () => {
 
       // Convert to array and sort by total_purchase_weight_grams descending
       return Object.values(groups).sort((a, b) => b.total_purchase_weight_grams - a.total_purchase_weight_grams);
+    }
+
+    if (loadedTable === 'supplier_transactions') {
+      const groups: Record<string, {
+        supplier_name: string;
+        material: string;
+        total_input: number;
+        total_output: number;
+        balance: number;
+        credit_count: number;
+      }> = {};
+
+      filteredData.forEach(row => {
+        const key = `${row.supplier_name}|${row.material}`.toLowerCase();
+
+        if (!groups[key]) {
+          groups[key] = {
+            supplier_name: row.supplier_name,
+            material: row.material,
+            total_input: 0,
+            total_output: 0,
+            balance: 0,
+            credit_count: 0
+          };
+        }
+
+        const resultValue = parseFloat(row.result) || 0;
+        if (row.type === 'input') {
+          groups[key].total_input += resultValue;
+        } else if (row.type === 'output') {
+          groups[key].total_output += resultValue;
+        }
+
+        if (row.is_credit) {
+          groups[key].credit_count++;
+        }
+      });
+
+      // Calculate balances
+      Object.values(groups).forEach(group => {
+        group.balance = group.total_input - group.total_output;
+      });
+
+      // Convert to array and sort by supplier name
+      return Object.values(groups).sort((a, b) => a.supplier_name.localeCompare(b.supplier_name));
     }
 
     return [];
@@ -722,6 +813,41 @@ export const TableDataExport = () => {
       toast({
         title: "Downloaded",
         description: `Grouped ${loadedTable} data exported successfully.`,
+      });
+      return;
+    }
+
+    // Check if we're in grouped mode for supplier_transactions
+    if (isGrouped && loadedTable === 'supplier_transactions' && groupedData.length > 0) {
+      // Export grouped data for supplier_transactions
+      const headers = 'Supplier Name,Material,Total Input (g),Total Output (g),Balance (g),Credit Transactions';
+      const rows = groupedData.map(group => {
+        const supplierName = (group as any).supplier_name.includes(',') || (group as any).supplier_name.includes('"')
+          ? `"${(group as any).supplier_name.replace(/"/g, '""')}"`
+          : (group as any).supplier_name;
+        const material = (group as any).material;
+        const totalInput = (group as any).total_input.toFixed(3);
+        const totalOutput = (group as any).total_output.toFixed(3);
+        const balance = (group as any).balance.toFixed(3);
+        const creditCount = (group as any).credit_count;
+        return `${supplierName},${material},${totalInput},${totalOutput},${balance},${creditCount}`;
+      });
+
+      const csvContent = [headers, ...rows].join('\n');
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${loadedTable}_summary_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Downloaded",
+        description: `Supplier summary data exported successfully.`,
       });
       return;
     }
@@ -1062,6 +1188,8 @@ export const TableDataExport = () => {
       navigate(`/add-sales?edit=true&id=${row.id}`);
     } else if (loadedTable === 'expense_log') {
       navigate(`/add-expense?edit=true&id=${row.id}`);
+    } else if (loadedTable === 'supplier_transactions') {
+      navigate(`/add-supplier-transaction?edit=true&id=${row.id}`);
     }
   };
 
@@ -1723,7 +1851,7 @@ export const TableDataExport = () => {
                 <span className="text-sm text-gray-500">({filteredData.length} records)</span>
               </span>
               <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                {(loadedTable === 'expense_log' || loadedTable === 'sales_log') && (
+                {(loadedTable === 'expense_log' || loadedTable === 'sales_log' || loadedTable === 'supplier_transactions') && (
                   <Button
                     variant={isGrouped ? "default" : "outline"}
                     size="sm"
@@ -1731,7 +1859,9 @@ export const TableDataExport = () => {
                     className="flex-1 sm:flex-none"
                   >
                     <Group className="w-4 h-4 mr-1" />
-                    <span className="hidden sm:inline">{isGrouped ? 'Ungr' : 'Gr'}oup </span>by Item
+                    <span className="hidden sm:inline">
+                      {isGrouped ? 'Ungr' : 'Gr'}oup {loadedTable === 'supplier_transactions' ? 'by Supplier' : 'by Item'}
+                    </span>
                   </Button>
                 )}
                 <Button variant="outline" size="sm" onClick={() => setShowColumnSelector(!showColumnSelector)} className="flex-1 sm:flex-none">
@@ -1982,6 +2112,76 @@ export const TableDataExport = () => {
                     )}
                   </TableBody>
                 </Table>
+              ) : isGrouped && loadedTable === 'supplier_transactions' ? (
+                // Grouped/Summary view for supplier_transactions
+                <Table className="w-full table-auto">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[120px]">
+                        Supplier Name
+                      </TableHead>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                        Material
+                      </TableHead>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px]">
+                        Total Input (g)
+                      </TableHead>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px]">
+                        Total Output (g)
+                      </TableHead>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px]">
+                        Balance (g)
+                      </TableHead>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                        Credit Txns
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {groupedData.map((group, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[120px] font-medium">
+                          {(group as any).supplier_name}
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          <span className="capitalize">{(group as any).material}</span>
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-green-600 font-semibold">
+                          {((group as any).total_input).toFixed(3)} g
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-red-600 font-semibold">
+                          {((group as any).total_output).toFixed(3)} g
+                        </TableCell>
+                        <TableCell className={`px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] font-bold ${(group as any).balance >= 0 ? 'text-blue-600' : 'text-red-700'}`}>
+                          {((group as any).balance).toFixed(3)} g
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          {(group as any).credit_count}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {/* Grand totals row */}
+                    {groupedData.length > 0 && (
+                      <TableRow className="font-semibold bg-gray-50">
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[120px]" colSpan={2}>
+                          GRAND TOTAL
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-green-600">
+                          {groupedData.reduce((sum, group) => sum + (group as any).total_input, 0).toFixed(3)} g
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-red-600">
+                          {groupedData.reduce((sum, group) => sum + (group as any).total_output, 0).toFixed(3)} g
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-blue-600">
+                          {groupedData.reduce((sum, group) => sum + (group as any).balance, 0).toFixed(3)} g
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          {groupedData.reduce((sum, group) => sum + (group as any).credit_count, 0)}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
               ) : (
                 // Normal view
                 <Table className="w-full table-auto">
@@ -2002,7 +2202,7 @@ export const TableDataExport = () => {
                         {visibleColumns.map((column) => (
                           <TableCell key={`${index}-${column}`} className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
                             {column === 'actions' ? (
-                              (loadedTable === 'sales_log' || loadedTable === 'expense_log') ? (
+                              (loadedTable === 'sales_log' || loadedTable === 'expense_log' || loadedTable === 'supplier_transactions') ? (
                                 <div className="flex gap-1 flex-nowrap">
                                   <Button
                                     variant="outline"
