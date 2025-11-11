@@ -659,8 +659,25 @@ export class PostgRESTClient {
       throw error;
     }
 
-    this.setToken(data.token);
-    return data;
+    // Handle array response from PostgreSQL function
+    const loginData = Array.isArray(data) ? data[0] : data;
+
+    if (!loginData || !loginData.token) {
+      throw new PostgRESTError('Login failed: No token received from server');
+    }
+
+    // Store token
+    this.setToken(loginData.token);
+
+    // Return formatted response
+    return {
+      token: loginData.token,
+      user: {
+        id: loginData.user_id,
+        username: loginData.username,
+        role: loginData.role
+      }
+    };
   }
 
   /**

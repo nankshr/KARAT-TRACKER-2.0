@@ -10,6 +10,7 @@ import { Dashboard } from "@/components/Dashboard";
 import { AddExpense } from "@/components/AddExpense";
 import { AddSales } from "@/components/AddSales";
 import { AddSupplierTransaction } from "@/components/AddSupplierTransaction";
+import { AddUser } from "@/components/AddUser";
 import { TableDataExport } from "@/components/TableDataExport";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -62,6 +63,11 @@ const AppContent = () => {
         <Route path="/add-supplier-transaction" element={
           <ProtectedRoute>
             <AddSupplierTransaction />
+          </ProtectedRoute>
+        } />
+        <Route path="/add-user" element={
+          <ProtectedRoute>
+            <AddUser />
           </ProtectedRoute>
         } />
         <Route path="/table-export" element={

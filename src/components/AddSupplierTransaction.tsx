@@ -47,6 +47,28 @@ export const AddSupplierTransaction = () => {
     }
   }, [isEditMode, editId]);
 
+  // Auto-calculate result when input values or calculation type changes
+  useEffect(() => {
+    const val1 = parseFloat(formData.input_value_1);
+    const val2 = parseFloat(formData.input_value_2);
+
+    // Only calculate if both values are valid numbers
+    if (!isNaN(val1) && !isNaN(val2) && val1 > 0 && val2 > 0) {
+      let result: number;
+      if (formData.calculation_type === 'cashToKacha') {
+        result = val1 / val2; // Cash ÷ Rate
+      } else {
+        // kachaToPurity or ornamentToPurity
+        result = val1 * (val2 / 100); // Weight × Purity%
+      }
+
+      setFormData(prev => ({ ...prev, result: result.toFixed(3) }));
+    } else {
+      // Clear result if inputs are invalid
+      setFormData(prev => ({ ...prev, result: '' }));
+    }
+  }, [formData.input_value_1, formData.input_value_2, formData.calculation_type]);
+
   const fetchTransactionRecord = async () => {
     if (!editId) return;
 
@@ -130,26 +152,6 @@ export const AddSupplierTransaction = () => {
     }
   };
 
-  const handleCalculation = () => {
-    const val1 = parseFloat(formData.input_value_1);
-    const val2 = parseFloat(formData.input_value_2);
-
-    if (isNaN(val1) || isNaN(val2)) {
-      toast.error('Please enter valid numbers for calculation');
-      return;
-    }
-
-    let result: number;
-    if (formData.calculation_type === 'cashToKacha') {
-      result = val1 / val2; // Cash ÷ Rate
-    } else {
-      // kachaToPurity or ornamentToPurity
-      result = val1 * (val2 / 100); // Weight × Purity%
-    }
-
-    setFormData(prev => ({ ...prev, result: result.toFixed(3) }));
-    toast.success('Calculation completed!');
-  };
 
   const checkDuplicateTransaction = async (
     asofDate: string,
@@ -201,8 +203,8 @@ export const AddSupplierTransaction = () => {
       toast.error('Please fill all calculation fields');
       return false;
     }
-    if (!formData.result) {
-      toast.error('Please calculate the result before saving');
+    if (!formData.result || parseFloat(formData.result) <= 0) {
+      toast.error('Invalid result value. Please check your input values.');
       return false;
     }
     return true;
@@ -568,22 +570,6 @@ export const AddSupplierTransaction = () => {
                       }`}
                       disabled={isLoading}
                     />
-                  </div>
-
-                  <div>
-                    <Button
-                      type="button"
-                      onClick={handleCalculation}
-                      className={`w-full ${
-                        formData.calculation_type === 'cashToKacha' ? 'bg-blue-600 hover:bg-blue-700' :
-                        formData.calculation_type === 'kachaToPurity' ? 'bg-purple-600 hover:bg-purple-700' :
-                        'bg-orange-600 hover:bg-orange-700'
-                      } text-white font-semibold`}
-                      disabled={isLoading}
-                    >
-                      <Calculator className="h-4 w-4 mr-2" />
-                      Calculate
-                    </Button>
                   </div>
 
                   <div className="space-y-2">

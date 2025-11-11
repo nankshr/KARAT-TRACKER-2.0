@@ -26,7 +26,7 @@ interface TableData {
 type TableName = 'users' | 'daily_rates' | 'expense_log' | 'sales_log' | 'supplier_transactions' | 'activity_log';
 
 const AVAILABLE_TABLES: { value: TableName; label: string }[] = [
- /* { value: 'users', label: 'Users' }, */
+  { value: 'users', label: 'Users' },
   { value: 'daily_rates', label: 'Daily Rates' },
   { value: 'expense_log', label: 'Expense Log' },
   { value: 'sales_log', label: 'Sales Log' },
@@ -198,7 +198,9 @@ export const TableDataExport = () => {
   // Filter available tables based on user role
   const availableTables = user?.role === 'employee'
     ? AVAILABLE_TABLES.filter(table => table.value === 'sales_log')
-    : AVAILABLE_TABLES;
+    : user?.role === 'admin'
+      ? AVAILABLE_TABLES  // Admin sees all tables including users
+      : AVAILABLE_TABLES.filter(table => table.value !== 'users');  // Owner doesn't see users
 
   // Audio recording hook
   const {
@@ -542,10 +544,16 @@ export const TableDataExport = () => {
         setLoadedTable(selectedTable);
         const allColumns = Object.keys(data[0] || {});
 
-        // Add actions column for sales_log and expense_log
-        let finalColumns = (selectedTable === 'sales_log' || selectedTable === 'expense_log')
-          ? ['actions', ...allColumns]
-          : allColumns;
+        // Add actions column for tables that support edit/delete
+        let finalColumns = allColumns;
+
+        // Add actions column for sales_log, expense_log, supplier_transactions, and users
+        if (selectedTable === 'sales_log' ||
+            selectedTable === 'expense_log' ||
+            selectedTable === 'supplier_transactions' ||
+            selectedTable === 'users') {
+          finalColumns = ['actions', ...allColumns];
+        }
 
         // Filter out financial columns for employee role on sales_log
         if (user?.role === 'employee' && selectedTable === 'sales_log') {
@@ -1190,6 +1198,8 @@ export const TableDataExport = () => {
       navigate(`/add-expense?edit=true&id=${row.id}`);
     } else if (loadedTable === 'supplier_transactions') {
       navigate(`/add-supplier-transaction?edit=true&id=${row.id}`);
+    } else if (loadedTable === 'users') {
+      navigate(`/add-user?edit=true&id=${row.id}`);
     }
   };
 
@@ -2202,7 +2212,11 @@ export const TableDataExport = () => {
                         {visibleColumns.map((column) => (
                           <TableCell key={`${index}-${column}`} className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
                             {column === 'actions' ? (
-                              (loadedTable === 'sales_log' || loadedTable === 'expense_log' || loadedTable === 'supplier_transactions') ? (
+                              (
+                                (loadedTable === 'sales_log' || loadedTable === 'expense_log') ||
+                                (loadedTable === 'supplier_transactions' && (user?.role === 'admin' || user?.role === 'owner')) ||
+                                (loadedTable === 'users' && user?.role === 'admin')
+                              ) ? (
                                 <div className="flex gap-1 flex-nowrap">
                                   <Button
                                     variant="outline"
@@ -2282,7 +2296,13 @@ export const TableDataExport = () => {
               {recordToDelete && loadedTable && (
                 <div className="bg-gray-50 border rounded-lg p-4 space-y-2">
                   <div className="font-medium text-gray-900">
-                    You are about to permanently delete this {loadedTable === 'sales_log' ? 'sales' : 'expense'} record:
+                    You are about to permanently delete this {
+                      loadedTable === 'sales_log' ? 'sales' :
+                      loadedTable === 'expense_log' ? 'expense' :
+                      loadedTable === 'supplier_transactions' ? 'supplier transaction' :
+                      loadedTable === 'users' ? 'user' :
+                      ''
+                    } record:
                   </div>
 
                   {loadedTable === 'sales_log' && (
@@ -2302,6 +2322,25 @@ export const TableDataExport = () => {
                       <div><span className="font-medium">Item Name:</span> {recordToDelete.item_name || 'N/A'}</div>
                       <div><span className="font-medium">Cost:</span> {recordToDelete.cost ? `₹${parseFloat(recordToDelete.cost).toLocaleString('en-IN')}` : 'N/A'}</div>
                       <div><span className="font-medium">Credit Status:</span> {recordToDelete.is_credit ? 'Udhaar (Credit)' : 'Paid'}</div>
+                    </div>
+                  )}
+
+                  {loadedTable === 'supplier_transactions' && (
+                    <div className="space-y-1 text-sm">
+                      <div><span className="font-medium">Supplier Name:</span> {recordToDelete.supplier_name || 'N/A'}</div>
+                      <div><span className="font-medium">Date:</span> {recordToDelete.asof_date ? new Date(recordToDelete.asof_date).toLocaleDateString('en-IN') : 'N/A'}</div>
+                      <div><span className="font-medium">Material:</span> {recordToDelete.material || 'N/A'}</div>
+                      <div><span className="font-medium">Type:</span> {recordToDelete.type || 'N/A'}</div>
+                      <div><span className="font-medium">Calculation:</span> {recordToDelete.calculation_type || 'N/A'}</div>
+                      <div><span className="font-medium">Result:</span> {recordToDelete.result ? `${parseFloat(recordToDelete.result).toFixed(3)}g` : 'N/A'}</div>
+                    </div>
+                  )}
+
+                  {loadedTable === 'users' && (
+                    <div className="space-y-1 text-sm">
+                      <div><span className="font-medium">Username:</span> {recordToDelete.username || 'N/A'}</div>
+                      <div><span className="font-medium">Role:</span> {recordToDelete.role || 'N/A'}</div>
+                      <div><span className="font-medium">Created:</span> {recordToDelete.created_at ? new Date(recordToDelete.created_at).toLocaleDateString('en-IN') : 'N/A'}</div>
                     </div>
                   )}
                 </div>

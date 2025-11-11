@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DailyRatesBanner } from './DailyRatesBanner';
 import { useAuth } from '@/contexts/AuthContext';
-import { PlusCircle, Receipt, ShoppingCart, LogOut, User, Crown, Database, Package } from 'lucide-react';
+import { PlusCircle, Receipt, ShoppingCart, LogOut, User, Crown, Database, Package, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export const Dashboard = () => {
@@ -124,6 +124,30 @@ export const Dashboard = () => {
                   className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold shadow-lg"
                 >
                   Add Transaction
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* User Management Card - For Admin only */}
+          {user?.role === 'admin' && (
+            <Card className="group cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-0 bg-white/90 backdrop-blur-sm">
+              <CardContent className="p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="p-4 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full group-hover:scale-110 transition-transform duration-300">
+                    <Shield className="h-8 w-8 text-white" />
+                  </div>
+                  <PlusCircle className="h-6 w-6 text-blue-500 group-hover:text-blue-600" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-800 mb-2">User Management</h3>
+                <p className="text-slate-600 mb-6">
+                  Manage user accounts, roles, and permissions
+                </p>
+                <Button
+                  onClick={() => navigate('/add-user')}
+                  className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold shadow-lg"
+                >
+                  Add New User
                 </Button>
               </CardContent>
             </Card>
