@@ -453,7 +453,8 @@ docker-compose -f docker-compose-local-test.yml logs -f
 Or use this single command to do it all at once:
 # Clean, rebuild, and start everything
 docker-compose -f docker-compose-local-test.yml down && docker build -t karat-tracker-frontend:latest --build-arg VITE_API_URL=http://localhost:3000 --build-arg VITE_APP_NAME="Karat Tracker" --build-arg VITE_APP_VERSION="2.0.0" --no-cache . && docker-compose -f docker-compose-local-test.yml up -d && docker ps
-To stop the services:
+
+# To stop the services:
 docker-compose -f docker-compose-local-test.yml down
 To view logs:
 # View all logs

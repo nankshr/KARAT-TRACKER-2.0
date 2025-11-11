@@ -59,7 +59,7 @@ export const Dashboard = () => {
 
         {/* Action Cards */}
         <div className={`grid grid-cols-1 ${
-          user?.role === 'employee' ? 'md:grid-cols-3' :
+          user?.role === 'employee' ? 'md:grid-cols-2 lg:grid-cols-4' :
           (user?.role === 'admin' || user?.role === 'owner') ? 'md:grid-cols-2 lg:grid-cols-4' :
           'md:grid-cols-2'
         } gap-6`}>
@@ -105,29 +105,27 @@ export const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Supplier Management Card - For Admin and Owner only */}
-          {(user?.role === 'admin' || user?.role === 'owner') && (
-            <Card className="group cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-0 bg-white/90 backdrop-blur-sm">
-              <CardContent className="p-8">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="p-4 bg-gradient-to-br from-amber-500 to-orange-600 rounded-full group-hover:scale-110 transition-transform duration-300">
-                    <Package className="h-8 w-8 text-white" />
-                  </div>
-                  <PlusCircle className="h-6 w-6 text-amber-500 group-hover:text-amber-600" />
+          {/* Supplier Management Card - Visible to all roles */}
+          <Card className="group cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-0 bg-white/90 backdrop-blur-sm">
+            <CardContent className="p-8">
+              <div className="flex items-center justify-between mb-6">
+                <div className="p-4 bg-gradient-to-br from-amber-500 to-orange-600 rounded-full group-hover:scale-110 transition-transform duration-300">
+                  <Package className="h-8 w-8 text-white" />
                 </div>
-                <h3 className="text-xl font-semibold text-slate-800 mb-2">Supplier Management</h3>
-                <p className="text-slate-600 mb-6">
-                  Track material transactions with suppliers for gold and silver
-                </p>
-                <Button
-                  onClick={() => navigate('/add-supplier-transaction')}
-                  className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold shadow-lg"
-                >
-                  Add Transaction
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+                <PlusCircle className="h-6 w-6 text-amber-500 group-hover:text-amber-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-slate-800 mb-2">Supplier Management</h3>
+              <p className="text-slate-600 mb-6">
+                Track material transactions with suppliers for gold and silver
+              </p>
+              <Button
+                onClick={() => navigate('/add-supplier-transaction')}
+                className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold shadow-lg"
+              >
+                Add Transaction
+              </Button>
+            </CardContent>
+          </Card>
 
           {/* User Management Card - For Admin only */}
           {user?.role === 'admin' && (

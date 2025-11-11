@@ -33,13 +33,7 @@ export const AddSupplierTransaction = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [originalData, setOriginalData] = useState<any>(null);
 
-  // Check role on mount
-  useEffect(() => {
-    if (user?.role === 'employee') {
-      toast.error('Access Denied: Only admin/owner can access supplier management');
-      navigate('/dashboard');
-    }
-  }, [user, navigate]);
+  // Role check removed - employees can now access supplier management
 
   useEffect(() => {
     if (isEditMode && editId) {

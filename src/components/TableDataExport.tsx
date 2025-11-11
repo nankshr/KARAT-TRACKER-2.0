@@ -197,7 +197,7 @@ export const TableDataExport = () => {
 
   // Filter available tables based on user role
   const availableTables = user?.role === 'employee'
-    ? AVAILABLE_TABLES.filter(table => table.value === 'sales_log')
+    ? AVAILABLE_TABLES.filter(table => table.value === 'sales_log' || table.value === 'supplier_transactions')
     : user?.role === 'admin'
       ? AVAILABLE_TABLES  // Admin sees all tables including users
       : AVAILABLE_TABLES.filter(table => table.value !== 'users');  // Owner doesn't see users
@@ -2213,8 +2213,7 @@ export const TableDataExport = () => {
                           <TableCell key={`${index}-${column}`} className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
                             {column === 'actions' ? (
                               (
-                                (loadedTable === 'sales_log' || loadedTable === 'expense_log') ||
-                                (loadedTable === 'supplier_transactions' && (user?.role === 'admin' || user?.role === 'owner')) ||
+                                (loadedTable === 'sales_log' || loadedTable === 'expense_log' || loadedTable === 'supplier_transactions') ||
                                 (loadedTable === 'users' && user?.role === 'admin')
                               ) ? (
                                 <div className="flex gap-1 flex-nowrap">
