@@ -292,6 +292,39 @@ psql -h YOUR_HOST -p 5432 -U postgres -d karat_tracker_p \
   -c "ALTER ROLE authenticator PASSWORD 'YOUR_SECURE_PASSWORD';"
 ```
 
+### Migrating Existing Database (Function Updates)
+
+If you're updating an existing production database and encounter "cannot change return type" errors, use the migration script:
+
+```bash
+# 1. BACKUP YOUR DATABASE FIRST!
+pg_dump -h YOUR_HOST -p 5432 -U postgres -d karat_tracker_p \
+  -f backup-$(date +%Y%m%d-%H%M%S).sql
+
+# 2. Run migration script (drops and recreates functions)
+psql -h YOUR_HOST -p 5432 -U postgres -d karat_tracker_p \
+  -f database/migration-auth-functions.sql
+
+# 3. Verify functions were created successfully
+psql -h YOUR_HOST -p 5432 -U postgres -d karat_tracker_p \
+  -f database/verify-functions.sql
+```
+
+**What the migration script does:**
+- ✅ Drops old function signatures (safe with `IF EXISTS`)
+- ✅ Creates new functions with updated return types
+- ✅ Adds new functions (`validate_session`, `refresh_token`)
+- ✅ Grants proper permissions to `web_anon` role
+- ✅ Uses transaction for atomic changes (all or nothing)
+
+**Migration updates these functions:**
+- `create_user` - User creation with role validation
+- `change_password` - Password change with verification
+- `admin_update_user` - Admin user management
+- `logout` - Session invalidation
+- `validate_session` - **NEW**: Server-side session validation
+- `refresh_token` - **NEW**: Token refresh for extended sessions
+
 ### Database Architecture
 
 **Roles:**
@@ -322,6 +355,10 @@ psql -h YOUR_HOST -p 5432 -U postgres -d karat_tracker_p \
 
 - ✅ **Environment Variables** - Sensitive data never committed to git
 - ✅ **JWT Authentication** - Token-based auth via PostgREST
+- ✅ **Session Management** - Server-side session validation with sessionid
+- ✅ **Token Refresh** - Automatic token refresh 5 minutes before expiration
+- ✅ **Idle Timeout** - Auto-logout after 30 minutes of inactivity
+- ✅ **Token Expiration** - JWT tokens expire after 24 hours
 - ✅ **Role-Based Access Control** - Database-level permissions
 - ✅ **HTTPS/SSL** - Let's Encrypt certificates (auto-renewed)
 - ✅ **CORS Protection** - Configured for your frontend domain
