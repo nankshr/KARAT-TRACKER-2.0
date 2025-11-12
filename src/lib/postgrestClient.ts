@@ -32,6 +32,49 @@ export function setToken(token: string): void {
 // Clear JWT token from localStorage
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem('karat_tracker_session_id');
+}
+
+// Session ID storage
+const SESSION_ID_KEY = 'karat_tracker_session_id';
+
+export function getSessionId(): string | null {
+  return localStorage.getItem(SESSION_ID_KEY);
+}
+
+export function setSessionId(sessionId: string): void {
+  localStorage.setItem(SESSION_ID_KEY, sessionId);
+}
+
+// JWT decoding and validation helpers
+interface JWTPayload {
+  user_id: string;
+  username: string;
+  user_role: string;
+  exp: number;
+}
+
+export function decodeJWT(token: string): JWTPayload | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      return null;
+    }
+    const payload = JSON.parse(atob(parts[1]));
+    return payload;
+  } catch (error) {
+    console.error('Failed to decode JWT:', error);
+    return null;
+  }
+}
+
+export function isTokenExpired(token: string): boolean {
+  const payload = decodeJWT(token);
+  if (!payload || !payload.exp) {
+    return true;
+  }
+  // exp is in seconds, Date.now() is in milliseconds
+  return payload.exp * 1000 < Date.now();
 }
 
 // PostgREST Error class
@@ -666,8 +709,11 @@ export class PostgRESTClient {
       throw new PostgRESTError('Login failed: No token received from server');
     }
 
-    // Store token
+    // Store token and session_id
     this.setToken(loginData.token);
+    if (loginData.session_id) {
+      setSessionId(loginData.session_id);
+    }
 
     // Return formatted response
     return {
@@ -686,6 +732,35 @@ export class PostgRESTClient {
   async logout(): Promise<void> {
     await this.rpc('logout');
     this.setToken(null);
+  }
+
+  /**
+   * Refresh token (generates new JWT with extended expiration)
+   */
+  async refreshToken(): Promise<{ token: string; session_id: string }> {
+    const { data, error } = await this.rpc('refresh_token');
+
+    if (error) {
+      throw error;
+    }
+
+    // Handle array response from PostgreSQL function
+    const refreshData = Array.isArray(data) ? data[0] : data;
+
+    if (!refreshData || !refreshData.token) {
+      throw new PostgRESTError('Token refresh failed: No token received from server');
+    }
+
+    // Store new token and session_id
+    this.setToken(refreshData.token);
+    if (refreshData.session_id) {
+      setSessionId(refreshData.session_id);
+    }
+
+    return {
+      token: refreshData.token,
+      session_id: refreshData.session_id
+    };
   }
 }
 

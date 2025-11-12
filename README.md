@@ -456,7 +456,7 @@ docker-compose -f docker-compose-local-test.yml down && docker build -t karat-tr
 
 # To stop the services:
 docker-compose -f docker-compose-local-test.yml down
-To view logs:
+
 # View all logs
 docker-compose -f docker-compose-local-test.yml logs -f
 

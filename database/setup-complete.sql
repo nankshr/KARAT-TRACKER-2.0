@@ -365,6 +365,93 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Validate session function
+-- Checks if the current user's session is still valid
+CREATE OR REPLACE FUNCTION validate_session()
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_user_id UUID;
+    v_session_id TEXT;
+BEGIN
+    -- Get user_id from JWT
+    v_user_id := (current_setting('request.jwt.claims', true)::json->>'user_id')::UUID;
+
+    -- Get stored sessionid from database
+    SELECT sessionid INTO v_session_id
+    FROM public.users
+    WHERE id = v_user_id;
+
+    -- Check if session exists (null means logged out)
+    IF v_session_id IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    RETURN TRUE;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Refresh token function
+-- Generates a new JWT token with extended expiration
+CREATE OR REPLACE FUNCTION refresh_token()
+RETURNS TABLE(
+    token TEXT,
+    session_id TEXT
+) AS $$
+DECLARE
+    v_user RECORD;
+    v_token TEXT;
+    v_session_id TEXT;
+    v_user_id UUID;
+BEGIN
+    -- Get user_id from JWT
+    v_user_id := (current_setting('request.jwt.claims', true)::json->>'user_id')::UUID;
+
+    -- Get user details and verify session is valid
+    SELECT u.id, u.username, u.role, u.sessionid
+    INTO v_user
+    FROM public.users u
+    WHERE u.id = v_user_id;
+
+    -- Check if user exists and has valid session
+    IF v_user.id IS NULL THEN
+        RAISE EXCEPTION 'User not found';
+    END IF;
+
+    IF v_user.sessionid IS NULL THEN
+        RAISE EXCEPTION 'Session invalidated - please login again';
+    END IF;
+
+    -- Generate new session ID
+    v_session_id := encode(gen_random_bytes(32), 'base64');
+
+    -- Update user's session
+    UPDATE public.users
+    SET sessionid = v_session_id, updated_at = now()
+    WHERE id = v_user.id;
+
+    -- Get JWT secret from config
+    SELECT value INTO v_token
+    FROM public.jwt_config
+    WHERE key = 'secret';
+
+    -- Generate new token with extended expiration (24 hours from now)
+    v_token := sign_jwt(
+        json_build_object(
+            'user_id', v_user.id,
+            'username', v_user.username,
+            'user_role', v_user.role,
+            'exp', extract(epoch from now() + interval '24 hours')
+        )::json,
+        v_token
+    );
+
+    RETURN QUERY SELECT v_token, v_session_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Get current user ID
 CREATE OR REPLACE FUNCTION current_user_id()
 RETURNS UUID AS $$
