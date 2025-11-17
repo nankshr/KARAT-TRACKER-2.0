@@ -4,6 +4,8 @@
 -- Purpose: Unified migration script for new or existing databases
 -- Features:
 --   - Supplier Management (tables, indexes)
+--   - Supplier Details (normalized supplier data with phone numbers)
+--   - Enhanced Calculation Types (Cash & Material direct entry)
 --   - Enhanced Authentication (session validation, token refresh)
 --   - Updated Auth Functions (proper JWT, user management)
 --
@@ -32,10 +34,10 @@ CREATE TABLE IF NOT EXISTS public.supplier_transactions (
     supplier_name TEXT NOT NULL,
     material TEXT NOT NULL CHECK (material IN ('gold', 'silver')),
     type TEXT NOT NULL CHECK (type IN ('input', 'output')),
-    calculation_type TEXT NOT NULL CHECK (calculation_type IN ('cashToKacha', 'kachaToPurity', 'ornamentToPurity')),
+    calculation_type TEXT NOT NULL CHECK (calculation_type IN ('cashToKacha', 'kachaToPurity', 'ornamentToPurity', 'Cash', 'Material')),
     input_value_1 DECIMAL(10,3) NOT NULL,
-    input_value_2 DECIMAL(10,3) NOT NULL,
-    result DECIMAL(10,3) NOT NULL,
+    input_value_2 DECIMAL(10,3),
+    result DECIMAL(10,3),
     is_credit BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
@@ -43,13 +45,68 @@ CREATE TABLE IF NOT EXISTS public.supplier_transactions (
 -- Grant permissions (safe to run multiple times)
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.supplier_transactions TO web_anon;
 
+-- Supplier Details Table (normalized supplier information)
+CREATE TABLE IF NOT EXISTS public.supplierdetails (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    supplier_name TEXT NOT NULL UNIQUE,
+    phone_number TEXT NOT NULL,
+    created_by TEXT NOT NULL REFERENCES public.users(username),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Grant permissions (safe to run multiple times)
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.supplierdetails TO web_anon;
+
 -- ============================================================================
 -- STEP 2: CREATE INDEXES (IF NOT EXISTS)
 -- ============================================================================
 
+-- Supplier Transactions Indexes
 CREATE INDEX IF NOT EXISTS idx_supplier_transactions_asof_date ON public.supplier_transactions(asof_date);
 CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier ON public.supplier_transactions(supplier_name);
 CREATE INDEX IF NOT EXISTS idx_supplier_transactions_material ON public.supplier_transactions(material);
+
+-- Supplier Details Indexes
+CREATE INDEX IF NOT EXISTS idx_supplierdetails_name ON public.supplierdetails(supplier_name);
+CREATE INDEX IF NOT EXISTS idx_supplierdetails_created_by ON public.supplierdetails(created_by);
+
+-- ============================================================================
+-- STEP 2.5: UPDATE EXISTING TABLES (for migrations from older versions)
+-- ============================================================================
+
+-- Update supplier_transactions if it exists with old constraints
+-- Drop old CHECK constraint on calculation_type if it exists
+ALTER TABLE public.supplier_transactions
+DROP CONSTRAINT IF EXISTS supplier_transactions_calculation_type_check;
+
+-- Add updated CHECK constraint with Cash and Material types
+ALTER TABLE public.supplier_transactions
+ADD CONSTRAINT supplier_transactions_calculation_type_check
+CHECK (calculation_type IN ('cashToKacha', 'kachaToPurity', 'ornamentToPurity', 'Cash', 'Material'));
+
+-- Make input_value_2 and result nullable for Cash and Material types (if they were NOT NULL before)
+DO $$
+BEGIN
+    -- Try to drop NOT NULL constraint on input_value_2 if it exists
+    ALTER TABLE public.supplier_transactions
+    ALTER COLUMN input_value_2 DROP NOT NULL;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Constraint doesn't exist, ignore
+        NULL;
+END $$;
+
+DO $$
+BEGIN
+    -- Try to drop NOT NULL constraint on result if it exists
+    ALTER TABLE public.supplier_transactions
+    ALTER COLUMN result DROP NOT NULL;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Constraint doesn't exist, ignore
+        NULL;
+END $$;
 
 -- ============================================================================
 -- STEP 3: DROP OLD FUNCTION SIGNATURES
@@ -442,10 +499,20 @@ BEGIN
     RAISE NOTICE 'Comprehensive Migration Complete!';
     RAISE NOTICE '============================================================';
     RAISE NOTICE 'Features Applied:';
-    RAISE NOTICE '  ✓ Supplier Management (tables & indexes)';
+    RAISE NOTICE '  ✓ Supplier Management (supplier_transactions table)';
+    RAISE NOTICE '  ✓ Supplier Details (supplierdetails table with phone)';
+    RAISE NOTICE '  ✓ Enhanced Calculation Types (Cash & Material)';
     RAISE NOTICE '  ✓ Enhanced Authentication (9 functions)';
     RAISE NOTICE '  ✓ Session Validation & Token Refresh';
     RAISE NOTICE '  ✓ User Management (admin controls)';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Tables Created/Updated:';
+    RAISE NOTICE '  • supplier_transactions - Transaction records';
+    RAISE NOTICE '    - Updated: Cash & Material calculation types';
+    RAISE NOTICE '    - Updated: Nullable input_value_2 and result';
+    RAISE NOTICE '  • supplierdetails - Supplier master data';
+    RAISE NOTICE '    - Fields: supplier_name, phone_number';
+    RAISE NOTICE '    - Indexes: name search, created_by';
     RAISE NOTICE '';
     RAISE NOTICE 'Functions Created/Updated:';
     RAISE NOTICE '  • create_user - User creation with validation';
@@ -454,7 +521,7 @@ BEGIN
     RAISE NOTICE '  • login - User login with JWT generation';
     RAISE NOTICE '  • logout - Session invalidation';
     RAISE NOTICE '  • validate_session - Server-side validation';
-    RAISE NOTICE '  • refresh_token - Token refresh (NEW)';
+    RAISE NOTICE '  • refresh_token - Token refresh';
     RAISE NOTICE '  • sign_jwt - JWT signing with HMAC-SHA256';
     RAISE NOTICE '  • current_user_role - Get user role from JWT';
     RAISE NOTICE '';
@@ -462,7 +529,8 @@ BEGIN
     RAISE NOTICE '  1. Restart PostgREST to reload schema';
     RAISE NOTICE '  2. Rebuild and deploy frontend';
     RAISE NOTICE '  3. Test login/logout flow';
-    RAISE NOTICE '  4. Verify supplier management works';
-    RAISE NOTICE '  5. Test token refresh (check console)';
+    RAISE NOTICE '  4. Add suppliers via "Add New Supplier" dialog';
+    RAISE NOTICE '  5. Test Cash and Material transaction types';
+    RAISE NOTICE '  6. Test token refresh (check console)';
     RAISE NOTICE '============================================================';
 END $$;
