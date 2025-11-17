@@ -1,0 +1,70 @@
+# UAT/Feature Docker Compose for Coolify with Traefik
+# Runs alongside production for user acceptance testing
+# Uses different domains and container names to avoid conflicts
+
+version: '3.8'
+
+services:
+  # PostgREST API - Internal only (UAT)
+  postgrest-uat:
+    image: postgrest/postgrest:v12.0.3
+    container_name: karat-tracker20-uat-postgrest
+    expose:
+      - "3000"  # Only exposed within Docker network
+    environment:
+      PGRST_DB_URI: ${PGRST_DB_URI_UAT:-${PGRST_DB_URI}}
+      PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS:-public}
+      PGRST_DB_ANON_ROLE: ${PGRST_DB_ANON_ROLE:-web_anon}
+      PGRST_JWT_SECRET: ${PGRST_JWT_SECRET_UAT:-${PGRST_JWT_SECRET}}
+      PGRST_SERVER_HOST: ${PGRST_SERVER_HOST:-*}
+      PGRST_SERVER_PORT: ${PGRST_SERVER_PORT:-3000}
+      PGRST_SERVER_CORS_ALLOWED_ORIGINS: ${PGRST_SERVER_CORS_ALLOWED_ORIGINS_UAT:-https://uat-kt.eyediaworks.in}
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    networks:
+      - coolify  # Use Coolify's network for internal communication
+    labels:
+      # Traefik configuration for PostgREST API (UAT)
+      - "traefik.enable=true"
+      - "traefik.http.routers.postgrest-uat.rule=Host(`api-uat-kt.eyediaworks.in`)"
+      - "traefik.http.routers.postgrest-uat.entrypoints=https"
+      - "traefik.http.routers.postgrest-uat.tls.certresolver=letsencrypt"
+      - "traefik.http.services.postgrest-uat.loadbalancer.server.port=3000"
+
+  # Frontend Application (UAT)
+  frontend-uat:
+    container_name: karat-tracker20-uat-frontend
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # API uses HTTPS through Traefik (UAT domain)
+        VITE_API_URL: https://api-uat-kt.eyediaworks.in
+        VITE_APP_NAME: ${VITE_APP_NAME:-Karat Tracker UAT}
+        VITE_APP_VERSION: ${VITE_APP_VERSION:-2.0.0-uat}
+        VITE_OPENAI_API_KEY: ${VITE_OPENAI_API_KEY:-}
+    expose:
+      - "80"  # Only exposed within Docker network
+    depends_on:
+      - postgrest-uat
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - coolify  # Use Coolify's network
+    labels:
+      # Traefik configuration for Frontend (UAT)
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend-uat.rule=Host(`uat-kt.eyediaworks.in`)"
+      - "traefik.http.routers.frontend-uat.entrypoints=https"
+      - "traefik.http.routers.frontend-uat.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend-uat.loadbalancer.server.port=80"
+
+networks:
+  coolify:
+    external: true  # Use Coolify's existing network
