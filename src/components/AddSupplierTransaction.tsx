@@ -27,9 +27,13 @@ export const AddSupplierTransaction = () => {
     material: '',
     type: 'input',
     calculation_type: 'cashToKacha',
-    input_value_1: '',
-    input_value_2: '',
-    result: '',
+    description: '',
+    amount_currency: '',
+    grams_weight: '',
+    purity_percentage: '',
+    rate_price: '',
+    result_amount: '',
+    result_grams: '',
     is_credit: false
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -59,35 +63,65 @@ export const AddSupplierTransaction = () => {
 
   // Auto-calculate result when input values or calculation type changes
   useEffect(() => {
-    const val1 = parseFloat(formData.input_value_1);
-    const val2 = parseFloat(formData.input_value_2);
+    const amount = parseFloat(formData.amount_currency);
+    const grams = parseFloat(formData.grams_weight);
+    const purity = parseFloat(formData.purity_percentage);
+    const rate = parseFloat(formData.rate_price);
 
-    // Handle Cash and Material types (direct entry, no calculation)
-    if (formData.calculation_type === 'Cash' || formData.calculation_type === 'Material') {
-      if (!isNaN(val1) && val1 > 0) {
-        setFormData(prev => ({ ...prev, result: val1.toFixed(3), input_value_2: '' }));
-      } else {
-        setFormData(prev => ({ ...prev, result: '', input_value_2: '' }));
-      }
-      return;
+    let resultAmount = '';
+    let resultGrams = '';
+
+    switch (formData.calculation_type) {
+      case 'cashToKacha':
+        // amount_currency ÷ rate_price = Result_grams
+        if (!isNaN(amount) && !isNaN(rate) && amount > 0 && rate > 0) {
+          resultGrams = (amount / rate).toFixed(3);
+        }
+        break;
+
+      case 'kachaToPurity':
+      case 'ornamentToPurity':
+        // grams_weight × purity_percentage% = Result_grams
+        if (!isNaN(grams) && !isNaN(purity) && grams > 0 && purity > 0) {
+          resultGrams = (grams * (purity / 100)).toFixed(3);
+        }
+        break;
+
+      case 'Cash':
+        // Direct cash entry = Result_amount
+        if (!isNaN(amount) && amount > 0) {
+          resultAmount = amount.toFixed(2);
+        }
+        break;
+
+      case 'Material':
+        // Direct material weight entry = Result_grams
+        if (!isNaN(grams) && grams > 0) {
+          resultGrams = grams.toFixed(3);
+        }
+        break;
+
+      case 'ornamentToCash':
+        // grams_weight × rate_price = Result_amount
+        if (!isNaN(grams) && !isNaN(rate) && grams > 0 && rate > 0) {
+          resultAmount = (grams * rate).toFixed(2);
+        }
+        break;
+
+      case 'PurityCalculation':
+        // grams_weight × purity_percentage% × rate_price = Result_amount
+        if (!isNaN(grams) && !isNaN(purity) && !isNaN(rate) && grams > 0 && purity > 0 && rate > 0) {
+          resultAmount = (grams * (purity / 100) * rate).toFixed(2);
+        }
+        break;
     }
 
-    // Only calculate if both values are valid numbers for other calculation types
-    if (!isNaN(val1) && !isNaN(val2) && val1 > 0 && val2 > 0) {
-      let result: number;
-      if (formData.calculation_type === 'cashToKacha') {
-        result = val1 / val2; // Cash ÷ Rate
-      } else {
-        // kachaToPurity or ornamentToPurity
-        result = val1 * (val2 / 100); // Weight × Purity%
-      }
-
-      setFormData(prev => ({ ...prev, result: result.toFixed(3) }));
-    } else {
-      // Clear result if inputs are invalid
-      setFormData(prev => ({ ...prev, result: '' }));
-    }
-  }, [formData.input_value_1, formData.input_value_2, formData.calculation_type]);
+    setFormData(prev => ({
+      ...prev,
+      result_amount: resultAmount,
+      result_grams: resultGrams
+    }));
+  }, [formData.amount_currency, formData.grams_weight, formData.purity_percentage, formData.rate_price, formData.calculation_type]);
 
   const fetchTransactionRecord = async () => {
     if (!editId) return;
@@ -123,9 +157,13 @@ export const AddSupplierTransaction = () => {
           material: data.material,
           type: data.type,
           calculation_type: data.calculation_type,
-          input_value_1: data.input_value_1?.toString() || '',
-          input_value_2: data.input_value_2?.toString() || '',
-          result: data.result?.toString() || '',
+          description: data.description || '',
+          amount_currency: data.amount_currency?.toString() || '',
+          grams_weight: data.grams_weight?.toString() || '',
+          purity_percentage: data.purity_percentage?.toString() || '',
+          rate_price: data.rate_price?.toString() || '',
+          result_amount: data.result_amount?.toString() || '',
+          result_grams: data.result_grams?.toString() || '',
           is_credit: data.is_credit || false
         });
       }
@@ -242,63 +280,115 @@ export const AddSupplierTransaction = () => {
     switch (formData.calculation_type) {
       case 'cashToKacha':
         return {
-          value1: 'Cash Amount (₹)',
-          value2: 'Rate per gram (₹)',
-          result: 'Kacha Weight (g)',
-          formula: 'Cash ÷ Rate',
-          value1Placeholder: 'e.g., 150000',
-          value2Placeholder: 'e.g., 150',
-          showValue2: true
+          formula: 'Cash ÷ Rate = Weight',
+          fields: ['amount_currency', 'rate_price'],
+          labels: {
+            amount_currency: 'Cash Amount (₹)',
+            rate_price: 'Rate per gram (₹/g)'
+          },
+          placeholders: {
+            amount_currency: 'e.g., 150000',
+            rate_price: 'e.g., 7500'
+          },
+          resultLabel: 'Kacha Weight (g)',
+          resultField: 'result_grams'
         };
       case 'kachaToPurity':
         return {
-          value1: 'Kacha Weight (g)',
-          value2: 'Purity (%)',
-          result: 'Pure Gold (g)',
-          formula: 'Kacha × Purity%',
-          value1Placeholder: 'e.g., 1000',
-          value2Placeholder: 'e.g., 80',
-          showValue2: true
+          formula: 'Weight × Purity% = Pure Weight',
+          fields: ['grams_weight', 'purity_percentage'],
+          labels: {
+            grams_weight: 'Kacha Weight (g)',
+            purity_percentage: 'Purity (%)'
+          },
+          placeholders: {
+            grams_weight: 'e.g., 1000',
+            purity_percentage: 'e.g., 80'
+          },
+          resultLabel: 'Pure Gold (g)',
+          resultField: 'result_grams'
         };
       case 'ornamentToPurity':
         return {
-          value1: 'Ornament Weight (g)',
-          value2: 'Purity (%)',
-          result: 'Pure Gold (g)',
-          formula: 'Ornament × Purity%',
-          value1Placeholder: 'e.g., 1000',
-          value2Placeholder: 'e.g., 91.6',
-          showValue2: true
+          formula: 'Weight × Purity% = Pure Weight',
+          fields: ['grams_weight', 'purity_percentage'],
+          labels: {
+            grams_weight: 'Ornament Weight (g)',
+            purity_percentage: 'Purity (%)'
+          },
+          placeholders: {
+            grams_weight: 'e.g., 1000',
+            purity_percentage: 'e.g., 91.6'
+          },
+          resultLabel: 'Pure Gold (g)',
+          resultField: 'result_grams'
         };
       case 'Cash':
         return {
-          value1: 'Cash Amount (₹)',
-          value2: '',
-          result: 'Cash Amount (₹)',
-          formula: 'Direct Entry',
-          value1Placeholder: 'e.g., 50000',
-          value2Placeholder: '',
-          showValue2: false
+          formula: 'Direct Cash Entry',
+          fields: ['amount_currency'],
+          labels: {
+            amount_currency: 'Cash Amount (₹)'
+          },
+          placeholders: {
+            amount_currency: 'e.g., 50000'
+          },
+          resultLabel: 'Cash Amount (₹)',
+          resultField: 'result_amount'
         };
       case 'Material':
         return {
-          value1: 'Weight (g)',
-          value2: '',
-          result: 'Weight (g)',
-          formula: 'Direct Entry',
-          value1Placeholder: 'e.g., 500',
-          value2Placeholder: '',
-          showValue2: false
+          formula: 'Direct Material Entry',
+          fields: ['grams_weight'],
+          labels: {
+            grams_weight: 'Weight (g)'
+          },
+          placeholders: {
+            grams_weight: 'e.g., 500'
+          },
+          resultLabel: 'Weight (g)',
+          resultField: 'result_grams'
+        };
+      case 'ornamentToCash':
+        return {
+          formula: 'Weight × Rate = Amount',
+          fields: ['grams_weight', 'rate_price'],
+          labels: {
+            grams_weight: 'Ornament Weight (g)',
+            rate_price: 'Rate per gram (₹/g)'
+          },
+          placeholders: {
+            grams_weight: 'e.g., 500',
+            rate_price: 'e.g., 7500'
+          },
+          resultLabel: 'Cash Amount (₹)',
+          resultField: 'result_amount'
+        };
+      case 'PurityCalculation':
+        return {
+          formula: 'Weight × Purity% × Rate = Amount',
+          fields: ['grams_weight', 'purity_percentage', 'rate_price'],
+          labels: {
+            grams_weight: 'Ornament Weight (g)',
+            purity_percentage: 'Purity (%)',
+            rate_price: 'Rate per gram (₹/g)'
+          },
+          placeholders: {
+            grams_weight: 'e.g., 1000',
+            purity_percentage: 'e.g., 91.6',
+            rate_price: 'e.g., 7500'
+          },
+          resultLabel: 'Cash Amount (₹)',
+          resultField: 'result_amount'
         };
       default:
         return {
-          value1: 'Value 1',
-          value2: 'Value 2',
-          result: 'Result',
           formula: '',
-          value1Placeholder: '',
-          value2Placeholder: '',
-          showValue2: true
+          fields: [],
+          labels: {},
+          placeholders: {},
+          resultLabel: 'Result',
+          resultField: 'result_amount'
         };
     }
   };
@@ -323,7 +413,7 @@ export const AddSupplierTransaction = () => {
       query = query.neq('id', excludeId);
     }
 
-    const { data, error } = await query.limit(1);
+    const { data, error } = await query.limit(1).execute();
 
     if (error) {
       console.error('Error in duplicate check:', error);
@@ -350,21 +440,25 @@ export const AddSupplierTransaction = () => {
       toast.error('Please select type');
       return false;
     }
-    if (!formData.input_value_1) {
-      toast.error('Please fill all required calculation fields');
-      return false;
-    }
-    // For Cash and Material types, only input_value_1 is required
-    if (formData.calculation_type !== 'Cash' && formData.calculation_type !== 'Material') {
-      if (!formData.input_value_2) {
-        toast.error('Please fill all calculation fields');
+
+    // Validate required fields based on calculation type
+    const labels = getFieldLabels();
+    for (const field of labels.fields) {
+      if (!formData[field as keyof typeof formData]) {
+        toast.error(`Please fill all required fields: ${labels.labels[field]}`);
         return false;
       }
     }
-    if (!formData.result || parseFloat(formData.result) <= 0) {
+
+    // Ensure at least one result has value
+    const resultAmount = parseFloat(formData.result_amount);
+    const resultGrams = parseFloat(formData.result_grams);
+
+    if ((isNaN(resultAmount) || resultAmount <= 0) && (isNaN(resultGrams) || resultGrams <= 0)) {
       toast.error('Invalid result value. Please check your input values.');
       return false;
     }
+
     return true;
   };
 
@@ -410,11 +504,13 @@ export const AddSupplierTransaction = () => {
         material: formData.material,
         type: formData.type,
         calculation_type: formData.calculation_type,
-        input_value_1: parseFloat(formData.input_value_1),
-        input_value_2: (formData.calculation_type === 'Cash' || formData.calculation_type === 'Material')
-          ? null
-          : parseFloat(formData.input_value_2),
-        result: parseFloat(formData.result),
+        description: formData.description || null,
+        amount_currency: formData.amount_currency ? parseFloat(formData.amount_currency) : null,
+        grams_weight: formData.grams_weight ? parseFloat(formData.grams_weight) : null,
+        purity_percentage: formData.purity_percentage ? parseFloat(formData.purity_percentage) : null,
+        rate_price: formData.rate_price ? parseFloat(formData.rate_price) : null,
+        result_amount: formData.result_amount ? parseFloat(formData.result_amount) : null,
+        result_grams: formData.result_grams ? parseFloat(formData.result_grams) : null,
         is_credit: formData.is_credit
       };
 
@@ -490,11 +586,13 @@ export const AddSupplierTransaction = () => {
         material: formData.material,
         type: formData.type,
         calculation_type: formData.calculation_type,
-        input_value_1: parseFloat(formData.input_value_1),
-        input_value_2: (formData.calculation_type === 'Cash' || formData.calculation_type === 'Material')
-          ? null
-          : parseFloat(formData.input_value_2),
-        result: parseFloat(formData.result),
+        description: formData.description || null,
+        amount_currency: formData.amount_currency ? parseFloat(formData.amount_currency) : null,
+        grams_weight: formData.grams_weight ? parseFloat(formData.grams_weight) : null,
+        purity_percentage: formData.purity_percentage ? parseFloat(formData.purity_percentage) : null,
+        rate_price: formData.rate_price ? parseFloat(formData.rate_price) : null,
+        result_amount: formData.result_amount ? parseFloat(formData.result_amount) : null,
+        result_grams: formData.result_grams ? parseFloat(formData.result_grams) : null,
         is_credit: formData.is_credit
       };
 
@@ -526,9 +624,13 @@ export const AddSupplierTransaction = () => {
         material: '',
         type: 'input',
         calculation_type: 'cashToKacha',
-        input_value_1: '',
-        input_value_2: '',
-        result: '',
+        description: '',
+        amount_currency: '',
+        grams_weight: '',
+        purity_percentage: '',
+        rate_price: '',
+        result_amount: '',
+        result_grams: '',
         is_credit: false
       }));
     } catch (error) {
@@ -553,9 +655,12 @@ export const AddSupplierTransaction = () => {
 
       // Clear calculation fields when calculation type changes
       if (field === 'calculation_type') {
-        newData.input_value_1 = '';
-        newData.input_value_2 = '';
-        newData.result = '';
+        newData.amount_currency = '';
+        newData.grams_weight = '';
+        newData.purity_percentage = '';
+        newData.rate_price = '';
+        newData.result_amount = '';
+        newData.result_grams = '';
       }
 
       return newData;
@@ -694,18 +799,39 @@ export const AddSupplierTransaction = () => {
                       <SelectItem value="ornamentToPurity">Ornament → Purity</SelectItem>
                       <SelectItem value="Cash">Cash (Direct Entry)</SelectItem>
                       <SelectItem value="Material">Material (Direct Entry)</SelectItem>
+                      <SelectItem value="ornamentToCash">Ornament → Cash</SelectItem>
+                      <SelectItem value="PurityCalculation">Purity Calculation</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              {/* Description Field */}
+              <div className="space-y-2">
+                <Label htmlFor="description" className="text-slate-700 font-medium">
+                  Description
+                </Label>
+                <Input
+                  id="description"
+                  type="text"
+                  placeholder="Enter transaction description"
+                  value={formData.description}
+                  onChange={(e) => handleInputChange('description', e.target.value)}
+                  className="border-slate-300 focus:border-yellow-400 focus:ring-yellow-400"
+                  disabled={isLoading}
+                />
               </div>
 
               {/* Calculation Section */}
               <div className={`p-6 rounded-lg border-2 ${
                 formData.calculation_type === 'cashToKacha' ? 'bg-blue-50 border-blue-200' :
                 formData.calculation_type === 'kachaToPurity' ? 'bg-purple-50 border-purple-200' :
+                formData.calculation_type === 'ornamentToPurity' ? 'bg-orange-50 border-orange-200' :
                 formData.calculation_type === 'Cash' ? 'bg-green-50 border-green-200' :
                 formData.calculation_type === 'Material' ? 'bg-teal-50 border-teal-200' :
-                'bg-orange-50 border-orange-200'
+                formData.calculation_type === 'ornamentToCash' ? 'bg-indigo-50 border-indigo-200' :
+                formData.calculation_type === 'PurityCalculation' ? 'bg-rose-50 border-rose-200' :
+                'bg-gray-50 border-gray-200'
               }`}>
                 <div className="flex items-center gap-2 mb-4">
                   <Calculator className="w-5 h-5" />
@@ -713,70 +839,57 @@ export const AddSupplierTransaction = () => {
                 </div>
 
                 <div className={`grid grid-cols-1 gap-4 items-end ${
-                  labels.showValue2 ? 'md:grid-cols-4' : 'md:grid-cols-2'
+                  labels.fields.length === 1 ? 'md:grid-cols-2' :
+                  labels.fields.length === 2 ? 'md:grid-cols-3' :
+                  labels.fields.length === 3 ? 'md:grid-cols-4' :
+                  'md:grid-cols-2'
                 }`}>
-                  <div className="space-y-2">
-                    <Label htmlFor="input_value_1" className={`font-semibold ${
-                      formData.calculation_type === 'cashToKacha' ? 'text-blue-700' :
-                      formData.calculation_type === 'kachaToPurity' ? 'text-purple-700' :
-                      formData.calculation_type === 'Cash' ? 'text-green-700' :
-                      formData.calculation_type === 'Material' ? 'text-teal-700' :
-                      'text-orange-700'
-                    }`}>
-                      {labels.value1} *
-                    </Label>
-                    <Input
-                      id="input_value_1"
-                      type="number"
-                      step="0.001"
-                      placeholder={labels.value1Placeholder}
-                      value={formData.input_value_1}
-                      onChange={(e) => handleInputChange('input_value_1', e.target.value)}
-                      className={`border-2 ${
-                        formData.calculation_type === 'cashToKacha' ? 'border-blue-300 focus:border-blue-500' :
-                        formData.calculation_type === 'kachaToPurity' ? 'border-purple-300 focus:border-purple-500' :
-                        formData.calculation_type === 'Cash' ? 'border-green-300 focus:border-green-500' :
-                        formData.calculation_type === 'Material' ? 'border-teal-300 focus:border-teal-500' :
-                        'border-orange-300 focus:border-orange-500'
-                      }`}
-                      disabled={isLoading}
-                    />
-                  </div>
-
-                  {labels.showValue2 && (
-                    <div className="space-y-2">
-                      <Label htmlFor="input_value_2" className={`font-semibold ${
+                  {/* Dynamic input fields based on calculation type */}
+                  {labels.fields.map((field: string) => (
+                    <div key={field} className="space-y-2">
+                      <Label htmlFor={field} className={`font-semibold ${
                         formData.calculation_type === 'cashToKacha' ? 'text-blue-700' :
                         formData.calculation_type === 'kachaToPurity' ? 'text-purple-700' :
-                        'text-orange-700'
+                        formData.calculation_type === 'ornamentToPurity' ? 'text-orange-700' :
+                        formData.calculation_type === 'Cash' ? 'text-green-700' :
+                        formData.calculation_type === 'Material' ? 'text-teal-700' :
+                        formData.calculation_type === 'ornamentToCash' ? 'text-indigo-700' :
+                        formData.calculation_type === 'PurityCalculation' ? 'text-rose-700' :
+                        'text-gray-700'
                       }`}>
-                        {labels.value2} *
+                        {labels.labels[field]} *
                       </Label>
                       <Input
-                        id="input_value_2"
+                        id={field}
                         type="number"
-                        step="0.001"
-                        placeholder={labels.value2Placeholder}
-                        value={formData.input_value_2}
-                        onChange={(e) => handleInputChange('input_value_2', e.target.value)}
+                        step={field.includes('amount') || field.includes('rate') || field.includes('purity') ? '0.01' : '0.001'}
+                        placeholder={labels.placeholders[field]}
+                        value={formData[field as keyof typeof formData] as string}
+                        onChange={(e) => handleInputChange(field, e.target.value)}
                         className={`border-2 ${
                           formData.calculation_type === 'cashToKacha' ? 'border-blue-300 focus:border-blue-500' :
                           formData.calculation_type === 'kachaToPurity' ? 'border-purple-300 focus:border-purple-500' :
-                          'border-orange-300 focus:border-orange-500'
+                          formData.calculation_type === 'ornamentToPurity' ? 'border-orange-300 focus:border-orange-500' :
+                          formData.calculation_type === 'Cash' ? 'border-green-300 focus:border-green-500' :
+                          formData.calculation_type === 'Material' ? 'border-teal-300 focus:border-teal-500' :
+                          formData.calculation_type === 'ornamentToCash' ? 'border-indigo-300 focus:border-indigo-500' :
+                          formData.calculation_type === 'PurityCalculation' ? 'border-rose-300 focus:border-rose-500' :
+                          'border-gray-300 focus:border-gray-500'
                         }`}
                         disabled={isLoading}
                       />
                     </div>
-                  )}
+                  ))}
 
+                  {/* Result field */}
                   <div className="space-y-2">
                     <Label htmlFor="result" className="font-semibold text-green-700">
-                      {labels.result}
+                      {labels.resultLabel}
                     </Label>
                     <Input
                       id="result"
                       type="text"
-                      value={formData.result}
+                      value={formData[labels.resultField as keyof typeof formData] as string}
                       readOnly
                       placeholder="Result"
                       className="border-2 border-green-400 bg-green-50 font-bold text-green-700"

@@ -114,9 +114,13 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     material: 'Material',
     type: 'Type',
     calculation_type: 'Calculation',
-    input_value_1: 'Input 1',
-    input_value_2: 'Input 2',
-    result: 'Result (g)',
+    description: 'Description',
+    amount_currency: 'Amount (₹)',
+    grams_weight: 'Weight (g)',
+    purity_percentage: 'Purity (%)',
+    rate_price: 'Rate (₹/g)',
+    result_amount: 'Result Amount (₹)',
+    result_grams: 'Result Grams (g)',
     is_credit: 'Credit',
     created_at: 'Created At',
   },
@@ -128,7 +132,7 @@ const DEFAULT_VISIBLE_COLUMNS: Record<string, string[]> = {
   daily_rates: ['asof_date', 'material', 'karat', 'new_price_per_gram', 'old_price_per_gram'],
   expense_log: ['actions', 'asof_date', 'expense_type', 'item_name', 'cost', 'is_credit'],
   sales_log: ['actions', 'asof_date', 'material', 'type', 'item_name', 'tag_no', 'customer_name', 'purchase_weight_grams'],
-  supplier_transactions: ['actions', 'asof_date', 'supplier_name', 'material', 'type', 'calculation_type', 'input_value_1', 'input_value_2', 'result'],
+  supplier_transactions: ['actions', 'asof_date', 'supplier_name', 'material', 'type', 'calculation_type', 'description', 'amount_currency', 'grams_weight', 'purity_percentage', 'rate_price', 'result_amount', 'result_grams', 'is_credit'],
   activity_log: ['user_id', 'table_name', 'action', 'old_data', 'new_data', 'timestamp'],
 };
 
@@ -136,7 +140,7 @@ const DEFAULT_VISIBLE_COLUMNS: Record<string, string[]> = {
 const COLUMNS_TO_TOTAL: Record<string, string[]> = {
   sales_log: ['wastage','old_weight_grams','old_material_profit','purchase_weight_grams','purchase_cost','selling_cost', 'profit'],
   expense_log: ['cost'],
-  supplier_transactions: ['result'],
+  supplier_transactions: ['result_amount', 'result_grams'],
   daily_rates: [],
   users: [],
   activity_log: [],
@@ -245,28 +249,8 @@ export const TableDataExport = () => {
   };
 
   // Get smart column name for supplier_transactions based on calculation_type
+  // No longer needed since we now use explicit column names (amount_currency, grams_weight, etc.)
   const getSmartColumnName = (column: string, row: TableData): string => {
-    if (loadedTable === 'supplier_transactions' && row.calculation_type) {
-      if (column === 'input_value_1') {
-        switch (row.calculation_type) {
-          case 'cashToKacha': return 'Cash (₹)';
-          case 'kachaToPurity': return 'Kacha (g)';
-          case 'ornamentToPurity': return 'Ornament (g)';
-        }
-      } else if (column === 'input_value_2') {
-        switch (row.calculation_type) {
-          case 'cashToKacha': return 'Rate (₹/g)';
-          case 'kachaToPurity': return 'Purity (%)';
-          case 'ornamentToPurity': return 'Purity (%)';
-        }
-      } else if (column === 'result') {
-        switch (row.calculation_type) {
-          case 'cashToKacha': return 'Kacha (g)';
-          case 'kachaToPurity': return 'Pure (g)';
-          case 'ornamentToPurity': return 'Pure (g)';
-        }
-      }
-    }
     return getColumnDisplayName(column);
   };
 
@@ -395,9 +379,24 @@ export const TableDataExport = () => {
     COLUMNS_TO_TOTAL[loadedTable].forEach(column => {
       const total = filteredData.reduce((sum, row) => {
         const value = parseFloat(row[column]) || 0;
+
+        // For supplier_transactions, input adds (+) and output subtracts (-)
+        if (loadedTable === 'supplier_transactions') {
+          if (row.type === 'input') {
+            return sum + value;
+          } else if (row.type === 'output') {
+            return sum - value;
+          }
+          return sum;
+        }
+
+        // For other tables, just add
         return sum + value;
       }, 0);
-      totalsObj[column] = parseFloat(total.toFixed(2));
+
+      // Use appropriate decimal places
+      const decimals = (loadedTable === 'supplier_transactions' && column === 'result_grams') ? 3 : 2;
+      totalsObj[column] = parseFloat(total.toFixed(decimals));
     });
     return totalsObj;
   }, [filteredData, loadedTable]);
@@ -473,18 +472,25 @@ export const TableDataExport = () => {
           groups[key] = {
             supplier_name: row.supplier_name,
             material: row.material,
-            total_input: 0,
-            total_output: 0,
-            balance: 0,
+            total_input_amount: 0,
+            total_output_amount: 0,
+            balance_amount: 0,
+            total_input_grams: 0,
+            total_output_grams: 0,
+            balance_grams: 0,
             credit_count: 0
           };
         }
 
-        const resultValue = parseFloat(row.result) || 0;
+        const resultAmount = parseFloat(row.result_amount) || 0;
+        const resultGrams = parseFloat(row.result_grams) || 0;
+
         if (row.type === 'input') {
-          groups[key].total_input += resultValue;
+          groups[key].total_input_amount += resultAmount;
+          groups[key].total_input_grams += resultGrams;
         } else if (row.type === 'output') {
-          groups[key].total_output += resultValue;
+          groups[key].total_output_amount += resultAmount;
+          groups[key].total_output_grams += resultGrams;
         }
 
         if (row.is_credit) {
@@ -494,7 +500,8 @@ export const TableDataExport = () => {
 
       // Calculate balances
       Object.values(groups).forEach(group => {
-        group.balance = group.total_input - group.total_output;
+        group.balance_amount = group.total_input_amount - group.total_output_amount;
+        group.balance_grams = group.total_input_grams - group.total_output_grams;
       });
 
       // Convert to array and sort by supplier name
@@ -828,17 +835,20 @@ export const TableDataExport = () => {
     // Check if we're in grouped mode for supplier_transactions
     if (isGrouped && loadedTable === 'supplier_transactions' && groupedData.length > 0) {
       // Export grouped data for supplier_transactions
-      const headers = 'Supplier Name,Material,Total Input (g),Total Output (g),Balance (g),Credit Transactions';
+      const headers = 'Supplier Name,Material,Input Amount (₹),Output Amount (₹),Balance Amount (₹),Input Grams (g),Output Grams (g),Balance Grams (g),Credit Transactions';
       const rows = groupedData.map(group => {
         const supplierName = (group as any).supplier_name.includes(',') || (group as any).supplier_name.includes('"')
           ? `"${(group as any).supplier_name.replace(/"/g, '""')}"`
           : (group as any).supplier_name;
         const material = (group as any).material;
-        const totalInput = (group as any).total_input.toFixed(3);
-        const totalOutput = (group as any).total_output.toFixed(3);
-        const balance = (group as any).balance.toFixed(3);
+        const inputAmount = (group as any).total_input_amount.toFixed(2);
+        const outputAmount = (group as any).total_output_amount.toFixed(2);
+        const balanceAmount = (group as any).balance_amount.toFixed(2);
+        const inputGrams = (group as any).total_input_grams.toFixed(3);
+        const outputGrams = (group as any).total_output_grams.toFixed(3);
+        const balanceGrams = (group as any).balance_grams.toFixed(3);
         const creditCount = (group as any).credit_count;
-        return `${supplierName},${material},${totalInput},${totalOutput},${balance},${creditCount}`;
+        return `${supplierName},${material},${inputAmount},${outputAmount},${balanceAmount},${inputGrams},${outputGrams},${balanceGrams},${creditCount}`;
       });
 
       const csvContent = [headers, ...rows].join('\n');
@@ -2134,13 +2144,22 @@ export const TableDataExport = () => {
                         Material
                       </TableHead>
                       <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px]">
-                        Total Input (g)
+                        Input Amount (₹)
                       </TableHead>
                       <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px]">
-                        Total Output (g)
+                        Output Amount (₹)
                       </TableHead>
                       <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px]">
-                        Balance (g)
+                        Balance Amount (₹)
+                      </TableHead>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px]">
+                        Input Grams (g)
+                      </TableHead>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px]">
+                        Output Grams (g)
+                      </TableHead>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px]">
+                        Balance Grams (g)
                       </TableHead>
                       <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
                         Credit Txns
@@ -2157,13 +2176,22 @@ export const TableDataExport = () => {
                           <span className="capitalize">{(group as any).material}</span>
                         </TableCell>
                         <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-green-600 font-semibold">
-                          {((group as any).total_input).toFixed(3)} g
+                          ₹{((group as any).total_input_amount).toFixed(2)}
                         </TableCell>
                         <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-red-600 font-semibold">
-                          {((group as any).total_output).toFixed(3)} g
+                          ₹{((group as any).total_output_amount).toFixed(2)}
                         </TableCell>
-                        <TableCell className={`px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] font-bold ${(group as any).balance >= 0 ? 'text-blue-600' : 'text-red-700'}`}>
-                          {((group as any).balance).toFixed(3)} g
+                        <TableCell className={`px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] font-bold ${(group as any).balance_amount >= 0 ? 'text-blue-600' : 'text-red-700'}`}>
+                          ₹{((group as any).balance_amount).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-green-600 font-semibold">
+                          {((group as any).total_input_grams).toFixed(3)} g
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-red-600 font-semibold">
+                          {((group as any).total_output_grams).toFixed(3)} g
+                        </TableCell>
+                        <TableCell className={`px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] font-bold ${(group as any).balance_grams >= 0 ? 'text-blue-600' : 'text-red-700'}`}>
+                          {((group as any).balance_grams).toFixed(3)} g
                         </TableCell>
                         <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
                           {(group as any).credit_count}
@@ -2177,13 +2205,22 @@ export const TableDataExport = () => {
                           GRAND TOTAL
                         </TableCell>
                         <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-green-600">
-                          {groupedData.reduce((sum, group) => sum + (group as any).total_input, 0).toFixed(3)} g
+                          ₹{groupedData.reduce((sum, group) => sum + (group as any).total_input_amount, 0).toFixed(2)}
                         </TableCell>
                         <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-red-600">
-                          {groupedData.reduce((sum, group) => sum + (group as any).total_output, 0).toFixed(3)} g
+                          ₹{groupedData.reduce((sum, group) => sum + (group as any).total_output_amount, 0).toFixed(2)}
                         </TableCell>
                         <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-blue-600">
-                          {groupedData.reduce((sum, group) => sum + (group as any).balance, 0).toFixed(3)} g
+                          ₹{groupedData.reduce((sum, group) => sum + (group as any).balance_amount, 0).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-green-600">
+                          {groupedData.reduce((sum, group) => sum + (group as any).total_input_grams, 0).toFixed(3)} g
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-red-600">
+                          {groupedData.reduce((sum, group) => sum + (group as any).total_output_grams, 0).toFixed(3)} g
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[100px] text-blue-600">
+                          {groupedData.reduce((sum, group) => sum + (group as any).balance_grams, 0).toFixed(3)} g
                         </TableCell>
                         <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
                           {groupedData.reduce((sum, group) => sum + (group as any).credit_count, 0)}

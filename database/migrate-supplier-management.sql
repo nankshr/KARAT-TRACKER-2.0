@@ -24,12 +24,17 @@ CREATE TABLE IF NOT EXISTS public.supplier_transactions (
     supplier_name TEXT NOT NULL,
     material TEXT NOT NULL CHECK (material IN ('gold', 'silver')),
     type TEXT NOT NULL CHECK (type IN ('input', 'output')),
-    calculation_type TEXT NOT NULL CHECK (calculation_type IN ('cashToKacha', 'kachaToPurity', 'ornamentToPurity')),
-    input_value_1 DECIMAL(10,3) NOT NULL,
-    input_value_2 DECIMAL(10,3) NOT NULL,
-    result DECIMAL(10,3) NOT NULL,
+    calculation_type TEXT NOT NULL CHECK (calculation_type IN ('cashToKacha', 'kachaToPurity', 'ornamentToPurity', 'Cash', 'Material', 'ornamentToCash', 'PurityCalculation')),
+    description TEXT,
+    amount_currency DECIMAL(10,2),
+    grams_weight DECIMAL(10,3),
+    purity_percentage DECIMAL(5,2),
+    rate_price DECIMAL(10,2),
+    result_amount DECIMAL(10,2),
+    result_grams DECIMAL(10,3),
     is_credit BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    CONSTRAINT check_result_exists CHECK (result_amount IS NOT NULL OR result_grams IS NOT NULL)
 );
 
 -- Grant permissions to web_anon
@@ -236,7 +241,10 @@ BEGIN
     RAISE NOTICE 'Supplier Management Migration Complete!';
     RAISE NOTICE '========================================';
     RAISE NOTICE 'Changes applied:';
-    RAISE NOTICE '  ✓ Created supplier_transactions table';
+    RAISE NOTICE '  ✓ Created supplier_transactions table with new schema';
+    RAISE NOTICE '  ✓ Added 7 calculation types (cashToKacha, kachaToPurity, ornamentToPurity, Cash, Material, ornamentToCash, PurityCalculation)';
+    RAISE NOTICE '  ✓ Added new columns: description, amount_currency, grams_weight, purity_percentage, rate_price, result_amount, result_grams';
+    RAISE NOTICE '  ✓ Added constraint to ensure at least one result column has value';
     RAISE NOTICE '  ✓ Added indexes for performance';
     RAISE NOTICE '  ✓ Fixed JWT to use user_role';
     RAISE NOTICE '  ✓ Updated sign_jwt with HMAC-SHA256';

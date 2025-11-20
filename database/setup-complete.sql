@@ -114,12 +114,27 @@ CREATE TABLE IF NOT EXISTS public.supplier_transactions (
     supplier_name TEXT NOT NULL,
     material TEXT NOT NULL CHECK (material IN ('gold', 'silver')),
     type TEXT NOT NULL CHECK (type IN ('input', 'output')),
-    calculation_type TEXT NOT NULL CHECK (calculation_type IN ('cashToKacha', 'kachaToPurity', 'ornamentToPurity')),
-    input_value_1 DECIMAL(10,3) NOT NULL,
-    input_value_2 DECIMAL(10,3) NOT NULL,
-    result DECIMAL(10,3) NOT NULL,
+    calculation_type TEXT NOT NULL CHECK (calculation_type IN ('cashToKacha', 'kachaToPurity', 'ornamentToPurity', 'Cash', 'Material', 'ornamentToCash', 'PurityCalculation')),
+    description TEXT,
+    amount_currency DECIMAL(10,2),
+    grams_weight DECIMAL(10,3),
+    purity_percentage DECIMAL(5,2),
+    rate_price DECIMAL(10,2),
+    result_amount DECIMAL(10,2),
+    result_grams DECIMAL(10,3),
     is_credit BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    CONSTRAINT check_result_exists CHECK (result_amount IS NOT NULL OR result_grams IS NOT NULL)
+);
+
+-- Create supplierdetails table
+CREATE TABLE IF NOT EXISTS public.supplierdetails (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    supplier_name TEXT NOT NULL UNIQUE,
+    phone_number TEXT NOT NULL,
+    created_by TEXT NOT NULL REFERENCES public.users(username),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
 -- Create activity_log table
@@ -156,6 +171,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.daily_rates TO web_anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.expense_log TO web_anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.sales_log TO web_anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.supplier_transactions TO web_anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.supplierdetails TO web_anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.activity_log TO web_anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.jwt_config TO web_anon;
 
@@ -592,6 +608,8 @@ CREATE INDEX IF NOT EXISTS idx_sales_log_asof_date ON public.sales_log(asof_date
 CREATE INDEX IF NOT EXISTS idx_supplier_transactions_asof_date ON public.supplier_transactions(asof_date);
 CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier ON public.supplier_transactions(supplier_name);
 CREATE INDEX IF NOT EXISTS idx_supplier_transactions_material ON public.supplier_transactions(material);
+CREATE INDEX IF NOT EXISTS idx_supplierdetails_name ON public.supplierdetails(supplier_name);
+CREATE INDEX IF NOT EXISTS idx_supplierdetails_created_by ON public.supplierdetails(created_by);
 CREATE INDEX IF NOT EXISTS idx_activity_log_timestamp ON public.activity_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_activity_log_user_id ON public.activity_log(user_id);
 
@@ -620,8 +638,14 @@ BEGIN
     RAISE NOTICE '';
     RAISE NOTICE 'Tables created:';
     RAISE NOTICE '  - users, daily_rates, expense_log';
-    RAISE NOTICE '  - sales_log, supplier_transactions';
+    RAISE NOTICE '  - sales_log, supplier_transactions, supplierdetails';
     RAISE NOTICE '  - activity_log, jwt_config';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Supplier Transactions Features:';
+    RAISE NOTICE '  - 7 calculation types (cashToKacha, kachaToPurity, ornamentToPurity,';
+    RAISE NOTICE '    Cash, Material, ornamentToCash, PurityCalculation)';
+    RAISE NOTICE '  - Fields: description, amount_currency, grams_weight, purity_percentage,';
+    RAISE NOTICE '    rate_price, result_amount, result_grams';
     RAISE NOTICE '';
     RAISE NOTICE 'Permissions granted to web_anon role';
     RAISE NOTICE 'Functions created for authentication';

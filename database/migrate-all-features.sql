@@ -34,12 +34,17 @@ CREATE TABLE IF NOT EXISTS public.supplier_transactions (
     supplier_name TEXT NOT NULL,
     material TEXT NOT NULL CHECK (material IN ('gold', 'silver')),
     type TEXT NOT NULL CHECK (type IN ('input', 'output')),
-    calculation_type TEXT NOT NULL CHECK (calculation_type IN ('cashToKacha', 'kachaToPurity', 'ornamentToPurity', 'Cash', 'Material')),
-    input_value_1 DECIMAL(10,3) NOT NULL,
-    input_value_2 DECIMAL(10,3),
-    result DECIMAL(10,3),
+    calculation_type TEXT NOT NULL CHECK (calculation_type IN ('cashToKacha', 'kachaToPurity', 'ornamentToPurity', 'Cash', 'Material', 'ornamentToCash', 'PurityCalculation')),
+    description TEXT,
+    amount_currency DECIMAL(10,2),
+    grams_weight DECIMAL(10,3),
+    purity_percentage DECIMAL(5,2),
+    rate_price DECIMAL(10,2),
+    result_amount DECIMAL(10,2),
+    result_grams DECIMAL(10,3),
     is_credit BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    CONSTRAINT check_result_exists CHECK (result_amount IS NOT NULL OR result_grams IS NOT NULL)
 );
 
 -- Grant permissions (safe to run multiple times)
@@ -75,38 +80,72 @@ CREATE INDEX IF NOT EXISTS idx_supplierdetails_created_by ON public.supplierdeta
 -- STEP 2.5: UPDATE EXISTING TABLES (for migrations from older versions)
 -- ============================================================================
 
--- Update supplier_transactions if it exists with old constraints
+-- Drop old columns if they exist (for migration from old schema)
+ALTER TABLE public.supplier_transactions
+DROP COLUMN IF EXISTS input_value_1;
+
+ALTER TABLE public.supplier_transactions
+DROP COLUMN IF EXISTS input_value_2;
+
+ALTER TABLE public.supplier_transactions
+DROP COLUMN IF EXISTS result;
+
+-- Add new columns if they don't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='supplier_transactions' AND column_name='description') THEN
+        ALTER TABLE public.supplier_transactions ADD COLUMN description TEXT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='supplier_transactions' AND column_name='amount_currency') THEN
+        ALTER TABLE public.supplier_transactions ADD COLUMN amount_currency DECIMAL(10,2);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='supplier_transactions' AND column_name='grams_weight') THEN
+        ALTER TABLE public.supplier_transactions ADD COLUMN grams_weight DECIMAL(10,3);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='supplier_transactions' AND column_name='purity_percentage') THEN
+        ALTER TABLE public.supplier_transactions ADD COLUMN purity_percentage DECIMAL(5,2);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='supplier_transactions' AND column_name='rate_price') THEN
+        ALTER TABLE public.supplier_transactions ADD COLUMN rate_price DECIMAL(10,2);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='supplier_transactions' AND column_name='result_amount') THEN
+        ALTER TABLE public.supplier_transactions ADD COLUMN result_amount DECIMAL(10,2);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='supplier_transactions' AND column_name='result_grams') THEN
+        ALTER TABLE public.supplier_transactions ADD COLUMN result_grams DECIMAL(10,3);
+    END IF;
+END $$;
+
+-- Update supplier_transactions constraints
 -- Drop old CHECK constraint on calculation_type if it exists
 ALTER TABLE public.supplier_transactions
 DROP CONSTRAINT IF EXISTS supplier_transactions_calculation_type_check;
 
--- Add updated CHECK constraint with Cash and Material types
+-- Add updated CHECK constraint with all 7 calculation types
 ALTER TABLE public.supplier_transactions
 ADD CONSTRAINT supplier_transactions_calculation_type_check
-CHECK (calculation_type IN ('cashToKacha', 'kachaToPurity', 'ornamentToPurity', 'Cash', 'Material'));
+CHECK (calculation_type IN ('cashToKacha', 'kachaToPurity', 'ornamentToPurity', 'Cash', 'Material', 'ornamentToCash', 'PurityCalculation'));
 
--- Make input_value_2 and result nullable for Cash and Material types (if they were NOT NULL before)
-DO $$
-BEGIN
-    -- Try to drop NOT NULL constraint on input_value_2 if it exists
-    ALTER TABLE public.supplier_transactions
-    ALTER COLUMN input_value_2 DROP NOT NULL;
-EXCEPTION
-    WHEN OTHERS THEN
-        -- Constraint doesn't exist, ignore
-        NULL;
-END $$;
+-- Drop old result constraint if exists
+ALTER TABLE public.supplier_transactions
+DROP CONSTRAINT IF EXISTS check_result_exists;
 
-DO $$
-BEGIN
-    -- Try to drop NOT NULL constraint on result if it exists
-    ALTER TABLE public.supplier_transactions
-    ALTER COLUMN result DROP NOT NULL;
-EXCEPTION
-    WHEN OTHERS THEN
-        -- Constraint doesn't exist, ignore
-        NULL;
-END $$;
+-- Add constraint to ensure at least one result column has value
+ALTER TABLE public.supplier_transactions
+ADD CONSTRAINT check_result_exists CHECK (result_amount IS NOT NULL OR result_grams IS NOT NULL);
 
 -- ============================================================================
 -- STEP 3: DROP OLD FUNCTION SIGNATURES
@@ -501,15 +540,18 @@ BEGIN
     RAISE NOTICE 'Features Applied:';
     RAISE NOTICE '  ✓ Supplier Management (supplier_transactions table)';
     RAISE NOTICE '  ✓ Supplier Details (supplierdetails table with phone)';
-    RAISE NOTICE '  ✓ Enhanced Calculation Types (Cash & Material)';
+    RAISE NOTICE '  ✓ Enhanced Calculation Types (7 types total)';
     RAISE NOTICE '  ✓ Enhanced Authentication (9 functions)';
     RAISE NOTICE '  ✓ Session Validation & Token Refresh';
     RAISE NOTICE '  ✓ User Management (admin controls)';
     RAISE NOTICE '';
     RAISE NOTICE 'Tables Created/Updated:';
     RAISE NOTICE '  • supplier_transactions - Transaction records';
-    RAISE NOTICE '    - Updated: Cash & Material calculation types';
-    RAISE NOTICE '    - Updated: Nullable input_value_2 and result';
+    RAISE NOTICE '    - Calculation Types: cashToKacha, kachaToPurity, ornamentToPurity,';
+    RAISE NOTICE '      Cash, Material, ornamentToCash, PurityCalculation';
+    RAISE NOTICE '    - New columns: description, amount_currency, grams_weight,';
+    RAISE NOTICE '      purity_percentage, rate_price, result_amount, result_grams';
+    RAISE NOTICE '    - Dropped: input_value_1, input_value_2, result';
     RAISE NOTICE '  • supplierdetails - Supplier master data';
     RAISE NOTICE '    - Fields: supplier_name, phone_number';
     RAISE NOTICE '    - Indexes: name search, created_by';
@@ -530,7 +572,8 @@ BEGIN
     RAISE NOTICE '  2. Rebuild and deploy frontend';
     RAISE NOTICE '  3. Test login/logout flow';
     RAISE NOTICE '  4. Add suppliers via "Add New Supplier" dialog';
-    RAISE NOTICE '  5. Test Cash and Material transaction types';
-    RAISE NOTICE '  6. Test token refresh (check console)';
+    RAISE NOTICE '  5. Test all 7 calculation types';
+    RAISE NOTICE '  6. Test grouped supplier view in Data Export';
+    RAISE NOTICE '  7. Verify footer totals show net balance (input - output)';
     RAISE NOTICE '============================================================';
 END $$;
