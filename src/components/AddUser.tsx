@@ -161,6 +161,7 @@ export const AddUser = () => {
 
         // Log activity
         await logActivityWithContext(
+          user!.id,
           'users',
           'UPDATE',
           editId!,
@@ -193,6 +194,7 @@ export const AddUser = () => {
 
         // Log activity
         await logActivityWithContext(
+          user!.id,
           'users',
           'INSERT',
           data?.id || 'new',

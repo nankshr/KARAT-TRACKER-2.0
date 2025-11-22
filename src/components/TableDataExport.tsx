@@ -459,9 +459,12 @@ export const TableDataExport = () => {
       const groups: Record<string, {
         supplier_name: string;
         material: string;
-        total_input: number;
-        total_output: number;
-        balance: number;
+        total_input_amount: number;
+        total_output_amount: number;
+        balance_amount: number;
+        total_input_grams: number;
+        total_output_grams: number;
+        balance_grams: number;
         credit_count: number;
       }> = {};
 
@@ -2072,7 +2075,7 @@ export const TableDataExport = () => {
                           GRAND TOTAL
                         </TableCell>
                         <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
-                          {groupedData.reduce((sum, group) => sum + group.count, 0)}
+                          {groupedData.reduce((sum, group) => sum + (group as any).count, 0)}
                         </TableCell>
                         <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
                           {new Intl.NumberFormat('en-IN', {
@@ -2123,7 +2126,7 @@ export const TableDataExport = () => {
                           GRAND TOTAL
                         </TableCell>
                         <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
-                          {groupedData.reduce((sum, group) => sum + group.count, 0)}
+                          {groupedData.reduce((sum, group) => sum + (group as any).count, 0)}
                         </TableCell>
                         <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
                           {groupedData.reduce((sum, group) => sum + (group as any).total_purchase_weight_grams, 0).toFixed(2)} g
@@ -2263,15 +2266,18 @@ export const TableDataExport = () => {
                                   >
                                     <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
                                   </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDeleteClick(row)}
-                                    className="h-7 w-7 p-0 sm:h-8 sm:w-8 border-red-300 text-red-600 hover:bg-red-50 flex-shrink-0"
-                                    title="Delete Record"
-                                  >
-                                    <Trash className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  </Button>
+                                  {/* Hide delete button for employee role on supplier_transactions table */}
+                                  {!(loadedTable === 'supplier_transactions' && user?.role === 'employee') && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleDeleteClick(row)}
+                                      className="h-7 w-7 p-0 sm:h-8 sm:w-8 border-red-300 text-red-600 hover:bg-red-50 flex-shrink-0"
+                                      title="Delete Record"
+                                    >
+                                      <Trash className="h-3 w-3 sm:h-4 sm:w-4" />
+                                    </Button>
+                                  )}
                                 </div>
                               ) : null
                             ) : (

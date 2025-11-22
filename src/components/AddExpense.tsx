@@ -325,7 +325,7 @@ export const AddExpense = () => {
       query = query.neq('id', excludeId);
     }
 
-    const { data, error } = await query.limit(1);
+    const { data, error } = await query.limit(1).execute();
 
     if (error) {
       console.error('Error in duplicate check:', error);

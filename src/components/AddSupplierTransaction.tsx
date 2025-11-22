@@ -393,35 +393,35 @@ export const AddSupplierTransaction = () => {
     }
   };
 
+  // Commenting out duplicate check function since its not required to check duplicate for this transaction for now
+  // const checkDuplicateTransaction = async (
+  //   asofDate: string,
+  //   supplierName: string,
+  //   material: string,
+  //   type: string,
+  //   excludeId?: string
+  // ) => {
+  //   let query = postgrest
+  //     .from('supplier_transactions')
+  //     .select('inserted_by, id')
+  //     .eq('asof_date', asofDate)
+  //     .eq('supplier_name', supplierName)
+  //     .eq('material', material)
+  //     .eq('type', type);
 
-  const checkDuplicateTransaction = async (
-    asofDate: string,
-    supplierName: string,
-    material: string,
-    type: string,
-    excludeId?: string
-  ) => {
-    let query = postgrest
-      .from('supplier_transactions')
-      .select('inserted_by, id')
-      .eq('asof_date', asofDate)
-      .eq('supplier_name', supplierName)
-      .eq('material', material)
-      .eq('type', type);
+  //   if (excludeId) {
+  //     query = query.neq('id', excludeId);
+  //   }
 
-    if (excludeId) {
-      query = query.neq('id', excludeId);
-    }
+  //   const { data, error } = await query.limit(1).execute();
 
-    const { data, error } = await query.limit(1).execute();
+  //   if (error) {
+  //     console.error('Error in duplicate check:', error);
+  //     throw error;
+  //   }
 
-    if (error) {
-      console.error('Error in duplicate check:', error);
-      throw error;
-    }
-
-    return data && data.length > 0 ? data[0] : null;
-  };
+  //   return data && data.length > 0 ? data[0] : null;
+  // };
 
   const validateForm = () => {
     if (!formData.asof_date) {
@@ -482,21 +482,21 @@ export const AddSupplierTransaction = () => {
       // Extract actual supplier name from display format
       const actualSupplierName = extractSupplierName(formData.supplier_name);
 
-      // Check for duplicates (excluding current record)
-      const duplicateEntry = await checkDuplicateTransaction(
-        formData.asof_date,
-        actualSupplierName,
-        formData.material,
-        formData.type,
-        editId
-      );
+      // Check for duplicates (excluding current record) - Commenting out since its not required to check duplicate for this transaction for now
+      // const duplicateEntry = await checkDuplicateTransaction(
+      //   formData.asof_date,
+      //   actualSupplierName,
+      //   formData.material,
+      //   formData.type,
+      //   editId
+      // );
 
-      if (duplicateEntry) {
-        toast.error(
-          `Duplicate entry detected! Transaction for ${actualSupplierName} (${formData.material}, ${formData.type}) on this date was already entered by ${duplicateEntry.inserted_by}.`
-        );
-        return;
-      }
+      // if (duplicateEntry) {
+      //   toast.error(
+      //     `Duplicate entry detected! Transaction for ${actualSupplierName} (${formData.material}, ${formData.type}) on this date was already entered by ${duplicateEntry.inserted_by}.`
+      //   );
+      //   return;
+      // }
 
       const transactionData = {
         asof_date: formData.asof_date,
@@ -564,20 +564,20 @@ export const AddSupplierTransaction = () => {
       // Extract actual supplier name from display format
       const actualSupplierName = extractSupplierName(formData.supplier_name);
 
-      // Check for duplicates
-      const duplicateEntry = await checkDuplicateTransaction(
-        formData.asof_date,
-        actualSupplierName,
-        formData.material,
-        formData.type
-      );
+      // Check for duplicates - Commenting out since its not required to check duplicate for this transaction for now
+      // const duplicateEntry = await checkDuplicateTransaction(
+      //   formData.asof_date,
+      //   actualSupplierName,
+      //   formData.material,
+      //   formData.type
+      // );
 
-      if (duplicateEntry) {
-        toast.error(
-          `Duplicate entry detected! Transaction for ${actualSupplierName} (${formData.material}, ${formData.type}) on this date was already entered by ${duplicateEntry.inserted_by}.`
-        );
-        return;
-      }
+      // if (duplicateEntry) {
+      //   toast.error(
+      //     `Duplicate entry detected! Transaction for ${actualSupplierName} (${formData.material}, ${formData.type}) on this date was already entered by ${duplicateEntry.inserted_by}.`
+      //   );
+      //   return;
+      // }
 
       const transactionData = {
         inserted_by: user.username,
